@@ -1,1 +1,183 @@
+@import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
 
+@theme {
+  --color-background: #faf8f2;
+  --color-surface: #f5f0e8;
+  --color-foreground: #1a1612;
+  --color-muted: #ede8de;
+  --color-muted-foreground: #7a7060;
+  --color-border: #d4cfc4;
+  --color-accent: #b8860b;
+  --color-accent-hover: #9a720a;
+  --font-body: "Lora", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+:root {
+  --background: #faf8f2;
+  --surface: #f5f0e8;
+  --foreground: #1a1612;
+  --muted: #ede8de;
+  --muted-foreground: #7a7060;
+  --border: #d4cfc4;
+  --accent: #b8860b;
+  --accent-hover: #9a720a;
+  --font-body: "Lora", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-body);
+    font-weight: 600;
+  }
+}
+
+/* Layout */
+.hon-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.hon-header {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hon-brand {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent);
+  font-style: italic;
+}
+
+.hon-dashboard {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .hon-dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hon-panel {
+  padding: 1.5rem;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.hon-panel--right {
+  border-right: none;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 57px);
+  overflow-y: auto;
+}
+
+.hon-section-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  margin: 0 0 1rem;
+  font-style: normal;
+}
+
+/* Buttons */
+.hon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.hon-btn:hover {
+  background: var(--muted);
+  border-color: var(--muted-foreground);
+}
+
+.hon-btn--accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.hon-btn--accent:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* Inputs */
+.hon-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  outline: none;
+}
+
+.hon-input:focus {
+  border-color: var(--accent);
+}
+
+/* Cards */
+.hon-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1rem;
+}
+
+/* Mono values */
+.hon-mono {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+/* Divider */
+.hon-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
+}
