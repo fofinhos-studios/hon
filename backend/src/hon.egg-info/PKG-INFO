@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: hon
+Version: 0.1.0
+Summary: Hon - reading planner
+Requires-Python: >=3.14
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.34
+Requires-Dist: pydantic>=2.11
+Requires-Dist: httpx>=0.28
