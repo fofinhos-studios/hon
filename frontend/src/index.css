@@ -504,3 +504,11 @@
   color: var(--accent);
   font-weight: 500;
 }
+
+.hon-header__icon {
+  color: var(--accent);
+}
+
+.hon-panel__list-wrap {
+  margin-top: 1rem;
+}
