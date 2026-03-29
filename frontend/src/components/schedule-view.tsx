@@ -39,8 +39,8 @@ export function ScheduleView({ result, pagesPerDay }: Props) {
       <div class="schedule-view__summary hon-mono">
         <span>
           {result.total_pages.toLocaleString()} pages ·{" "}
-          {result.total_reading_days} reading day{result.total_reading_days === 1 ? "" : "s"} ·{" "}
-          {pagesPerDay}pp/day
+          {result.total_reading_days} reading day
+          {result.total_reading_days === 1 ? "" : "s"} · {pagesPerDay}pp/day
         </span>
         <span class="schedule-view__finish">
           Finishes {formatDate(result.finish_date)}

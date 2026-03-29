@@ -1,4 +1,10 @@
-import type { Book, BookSchedule, DayOfWeek, ReadingMethod, ScheduleResult } from "../types";
+import type {
+  Book,
+  BookSchedule,
+  DayOfWeek,
+  ReadingMethod,
+  ScheduleResult,
+} from "../types";
 
 // ── Date utilities ────────────────────────────────────────────────────────────
 
@@ -91,7 +97,10 @@ function firstReadingDay(startISO: string, readingDays: DayOfWeek[]): string {
 /**
  * Return the ISO date of the next reading day STRICTLY AFTER afterISO.
  */
-function nextReadingDayAfter(afterISO: string, readingDays: DayOfWeek[]): string {
+function nextReadingDayAfter(
+  afterISO: string,
+  readingDays: DayOfWeek[],
+): string {
   const next = toISO(addCalendarDays(parseISO(afterISO), 1));
   return firstReadingDay(next, readingDays);
 }
@@ -149,7 +158,8 @@ export function calculateSchedule(
     currentStart = nextReadingDayAfter(finish, readingDays);
   }
 
-  const lastFinish = bookSchedules.at(-1)?.finish_date ?? startDateISO;
+  const lastFinish =
+    bookSchedules[bookSchedules.length - 1]?.finish_date ?? startDateISO;
   return {
     books: bookSchedules,
     total_pages: totalPages,

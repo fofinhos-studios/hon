@@ -2,7 +2,10 @@ import type { Book } from "../types";
 
 const API_BASE = "/api";
 
-async function parseError(response: Response, fallback: string): Promise<Error> {
+async function parseError(
+  response: Response,
+  fallback: string,
+): Promise<Error> {
   try {
     const data = (await response.json()) as { detail?: string };
     if (typeof data.detail === "string") return new Error(data.detail);

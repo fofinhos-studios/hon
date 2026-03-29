@@ -52,7 +52,8 @@ export function BookList({ books, onRemove }: Props) {
         ))}
       </ul>
       <p class="book-list__total hon-mono">
-        {books.length} book{books.length === 1 ? "" : "s"} · {totalPages.toLocaleString()} pages total
+        {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
+        {totalPages.toLocaleString()} pages total
       </p>
     </div>
   );

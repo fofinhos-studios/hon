@@ -55,7 +55,13 @@ describe("addReadingDays", () => {
 describe("calculateSchedule sequential", () => {
   test("single book: finish date is ceil(pages/ppd) reading days from start", () => {
     const books = [makeBook("a", 100)];
-    const result = calculateSchedule(books, EVERY_DAY, 10, "sequential", "2026-01-05");
+    const result = calculateSchedule(
+      books,
+      EVERY_DAY,
+      10,
+      "sequential",
+      "2026-01-05",
+    );
     expect(result.books).toHaveLength(1);
     expect(result.books[0].start_date).toBe("2026-01-05");
     expect(result.books[0].finish_date).toBe("2026-01-14");
@@ -65,7 +71,13 @@ describe("calculateSchedule sequential", () => {
 
   test("two books: second starts the reading day after first finishes", () => {
     const books = [makeBook("a", 50), makeBook("b", 50)];
-    const result = calculateSchedule(books, EVERY_DAY, 50, "sequential", "2026-01-05");
+    const result = calculateSchedule(
+      books,
+      EVERY_DAY,
+      50,
+      "sequential",
+      "2026-01-05",
+    );
     expect(result.books[0].start_date).toBe("2026-01-05");
     expect(result.books[0].finish_date).toBe("2026-01-05");
     expect(result.books[1].start_date).toBe("2026-01-06");
@@ -74,14 +86,26 @@ describe("calculateSchedule sequential", () => {
 
   test("skips non-reading days between books", () => {
     const books = [makeBook("a", 50), makeBook("b", 50)];
-    const result = calculateSchedule(books, WEEKDAYS, 50, "sequential", "2026-01-05");
+    const result = calculateSchedule(
+      books,
+      WEEKDAYS,
+      50,
+      "sequential",
+      "2026-01-05",
+    );
     expect(result.books[0].finish_date).toBe("2026-01-05");
     expect(result.books[1].start_date).toBe("2026-01-06");
   });
 
   test("fractional pages rounds up days", () => {
     const books = [makeBook("a", 101)];
-    const result = calculateSchedule(books, EVERY_DAY, 10, "sequential", "2026-01-05");
+    const result = calculateSchedule(
+      books,
+      EVERY_DAY,
+      10,
+      "sequential",
+      "2026-01-05",
+    );
     expect(result.total_reading_days).toBe(11);
   });
 });
@@ -89,7 +113,13 @@ describe("calculateSchedule sequential", () => {
 describe("calculateSchedule interleaved", () => {
   test("all books share the same start and finish date", () => {
     const books = [makeBook("a", 100), makeBook("b", 100)];
-    const result = calculateSchedule(books, EVERY_DAY, 20, "interleaved", "2026-01-05");
+    const result = calculateSchedule(
+      books,
+      EVERY_DAY,
+      20,
+      "interleaved",
+      "2026-01-05",
+    );
     expect(result.books[0].start_date).toBe("2026-01-05");
     expect(result.books[1].start_date).toBe("2026-01-05");
     expect(result.books[0].finish_date).toBe(result.books[1].finish_date);
@@ -99,12 +129,22 @@ describe("calculateSchedule interleaved", () => {
 
 describe("calculatePagesPerDay", () => {
   test("divides total pages by available reading days (rounds up)", () => {
-    const ppd = calculatePagesPerDay(100, EVERY_DAY, "2026-01-05", "2026-01-14");
+    const ppd = calculatePagesPerDay(
+      100,
+      EVERY_DAY,
+      "2026-01-05",
+      "2026-01-14",
+    );
     expect(ppd).toBe(10);
   });
 
   test("rounds up for fractional result", () => {
-    const ppd = calculatePagesPerDay(101, EVERY_DAY, "2026-01-05", "2026-01-14");
+    const ppd = calculatePagesPerDay(
+      101,
+      EVERY_DAY,
+      "2026-01-05",
+      "2026-01-14",
+    );
     expect(ppd).toBe(11);
   });
 

@@ -48,7 +48,12 @@
     font-family: var(--font-body);
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-body);
     font-weight: 600;
   }
@@ -186,6 +191,9 @@
 .day-picker {
   display: flex;
   gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .day-picker__btn {
@@ -431,6 +439,9 @@
 .reading-planner__method-group {
   display: flex;
   gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .reading-planner__method-btn {

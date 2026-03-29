@@ -1,6 +1,6 @@
 import "../test/setup";
-import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import type { DayOfWeek } from "../types";
 import { DayPicker } from "./day-picker";
 
@@ -27,14 +27,18 @@ describe("DayPicker", () => {
   test("clicking a day toggles it", () => {
     const onChange = mock((days: DayOfWeek[]) => days);
     const view = render(<DayPicker selected={[]} onChange={onChange} />);
-    fireEvent.click(view.getByText("Mo").closest("button")!);
+    const button = view.getByText("Mo").closest("button");
+    if (!button) throw new Error("Mo button not found");
+    fireEvent.click(button);
     expect(onChange).toHaveBeenCalledWith([0]);
   });
 
   test("clicking an active day removes it", () => {
     const onChange = mock((days: DayOfWeek[]) => days);
     const view = render(<DayPicker selected={[0]} onChange={onChange} />);
-    fireEvent.click(view.getByText("Mo").closest("button")!);
+    const button = view.getByText("Mo").closest("button");
+    if (!button) throw new Error("Mo button not found");
+    fireEvent.click(button);
     expect(onChange).toHaveBeenCalledWith([]);
   });
 });
