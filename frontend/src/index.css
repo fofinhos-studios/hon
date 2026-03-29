@@ -205,3 +205,87 @@
   border-color: var(--accent);
   color: white;
 }
+
+/* Book search */
+.book-search {
+  position: relative;
+}
+
+.book-search__input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.book-search__icon {
+  position: absolute;
+  left: 0.625rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.book-search__input {
+  padding-left: 2rem;
+}
+
+.book-search__status,
+.book-search__error {
+  font-size: 0.8125rem;
+  margin: 0.375rem 0 0;
+  color: var(--muted-foreground);
+}
+
+.book-search__error {
+  color: #c0392b;
+}
+
+.book-search__results {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.book-search__result {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--muted);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.book-search__result:hover {
+  background: var(--muted);
+}
+
+.book-search__cover {
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.book-search__result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.book-search__result-title {
+  font-size: 0.9375rem;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.book-search__result-meta {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
