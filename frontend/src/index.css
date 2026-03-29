@@ -368,3 +368,78 @@
   font-size: 0.8125rem;
   margin: 0;
 }
+
+/* Reading planner */
+.reading-planner {
+  padding: 0;
+}
+
+.reading-planner__section {
+  margin-bottom: 0;
+}
+
+.reading-planner__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.reading-planner__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.reading-planner__label {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.reading-planner__ppd {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.reading-planner__ppd-input {
+  width: 6rem;
+}
+
+.reading-planner__slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.reading-planner__date-input {
+  width: 100%;
+}
+
+.reading-planner__warn {
+  font-size: 0.8125rem;
+  color: #c0392b;
+  margin: 0.25rem 0 0;
+}
+
+.reading-planner__empty {
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.reading-planner__method-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reading-planner__method-btn {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.reading-planner__method-btn--active {
+  background: var(--foreground);
+  border-color: var(--foreground);
+  color: var(--background);
+}
