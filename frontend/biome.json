@@ -1,0 +1,13 @@
+{
+  "formatter": {
+    "indentStyle": "space"
+  },
+  "linter": {
+    "enabled": true
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  }
+}
