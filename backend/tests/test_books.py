@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
@@ -73,6 +74,25 @@ def test_search_filters_books_without_page_count():
 def test_search_requires_query():
     response = client.get("/books/search")
     assert response.status_code == 422
+
+
+def test_search_rejects_queries_shorter_than_three_characters():
+    response = client.get("/books/search?q=lo")
+    assert response.status_code == 422
+
+
+def test_search_returns_gateway_timeout_when_upstream_times_out():
+    with patch("hon.routers.books.httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=httpx.ReadTimeout("timed out"))
+        mock_client_class.return_value = mock_client
+
+        response = client.get("/books/search?q=lord")
+
+    assert response.status_code == 504
+    assert response.json() == {"detail": "Book search timed out"}
 
 
 def test_search_handles_missing_cover():
