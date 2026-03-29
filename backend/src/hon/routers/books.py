@@ -1,7 +1,7 @@
 import inspect
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from hon.models.book import BookResult
 
@@ -11,6 +11,7 @@ OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 OPENLIBRARY_COVER_URL = "https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
 SEARCH_FIELDS = "key,title,author_name,number_of_pages_median,cover_i"
 SEARCH_LIMIT = 10
+SEARCH_TIMEOUT_SECONDS = 15.0
 
 
 def _parse_work_id(key: str) -> str:
@@ -44,16 +45,21 @@ async def _resolve(value):
 
 
 @router.get("/search", response_model=list[BookResult])
-async def search_books(q: str = Query(..., min_length=1)) -> list[BookResult]:
+async def search_books(q: str = Query(..., min_length=3)) -> list[BookResult]:
     params = {
         "q": q,
         "fields": SEARCH_FIELDS,
         "limit": SEARCH_LIMIT,
     }
-    async with httpx.AsyncClient() as client:
-        response = await client.get(OPENLIBRARY_SEARCH_URL, params=params)
-        await _resolve(response.raise_for_status())
-        data = await _resolve(response.json())
+    try:
+        async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
+            response = await client.get(OPENLIBRARY_SEARCH_URL, params=params)
+            await _resolve(response.raise_for_status())
+            data = await _resolve(response.json())
+    except httpx.ReadTimeout as exc:
+        raise HTTPException(status_code=504, detail="Book search timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Book search unavailable") from exc
 
     results = []
     for doc in data.get("docs", []):

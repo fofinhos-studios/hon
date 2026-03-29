@@ -13,28 +13,39 @@ export function BookSearch({ onAdd }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
 
   const handleInput = useCallback((value: string) => {
+    const trimmed = value.trim();
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     setQuery(value);
     setError("");
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    if (value.trim().length < 2) {
+    if (trimmed.length < 3) {
       setResults([]);
+      setLoading(false);
       return;
     }
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const books = await searchBooks(value.trim());
+        const books = await searchBooks(trimmed);
+        if (requestId !== requestIdRef.current) return;
+        setError("");
         setResults(books);
       } catch (err) {
+        if (requestId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : "Search failed");
         setResults([]);
       } finally {
-        setLoading(false);
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     }, 350);
   }, []);
