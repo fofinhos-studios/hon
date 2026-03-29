@@ -14,33 +14,30 @@ export function BookSearch({ onAdd }: Props) {
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleInput = useCallback(
-    (value: string) => {
-      setQuery(value);
-      setError("");
+  const handleInput = useCallback((value: string) => {
+    setQuery(value);
+    setError("");
 
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-      if (value.trim().length < 2) {
+    if (value.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const books = await searchBooks(value.trim());
+        setResults(books);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Search failed");
         setResults([]);
-        return;
+      } finally {
+        setLoading(false);
       }
-
-      debounceRef.current = setTimeout(async () => {
-        setLoading(true);
-        try {
-          const books = await searchBooks(value.trim());
-          setResults(books);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Search failed");
-          setResults([]);
-        } finally {
-          setLoading(false);
-        }
-      }, 350);
-    },
-    [],
-  );
+    }, 350);
+  }, []);
 
   const handleAdd = (book: Book) => {
     onAdd(book);
@@ -76,9 +73,9 @@ export function BookSearch({ onAdd }: Props) {
       )}
 
       {results.length > 0 && (
-        <ul class="book-search__results" id="book-search-results" role="listbox">
+        <ul class="book-search__results" id="book-search-results">
           {results.map((book) => (
-            <li key={book.id} role="option" aria-selected="false">
+            <li key={book.id}>
               <button
                 type="button"
                 class="book-search__result"

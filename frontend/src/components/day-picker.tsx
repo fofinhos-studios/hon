@@ -17,7 +17,7 @@ export function DayPicker({ selected, onChange }: Props) {
   };
 
   return (
-    <div class="day-picker" role="group" aria-label="Reading days">
+    <fieldset class="day-picker" aria-label="Reading days">
       {ALL_DAYS.map((day) => {
         const active = selectedSet.has(day);
         return (
@@ -32,6 +32,6 @@ export function DayPicker({ selected, onChange }: Props) {
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
