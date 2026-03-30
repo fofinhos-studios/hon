@@ -16,6 +16,16 @@ SEARCH_TIMEOUT_SECONDS = 15.0
 
 # ── Google Books ────────────────────────────────────────────────────────────
 
+def _normalize_google_cover_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    return url.replace("http://", "https://", 1)
+
+
+def _google_books_queries(q: str) -> list[str]:
+    return [f"intitle:{q}", f"inauthor:{q}", q]
+
+
 def _normalize_gb(item: dict) -> BookResult | None:
     info = item.get("volumeInfo", {})
     page_count = info.get("pageCount")
@@ -25,7 +35,7 @@ def _normalize_gb(item: dict) -> BookResult | None:
     cover_url: str | None = None
     image_links = info.get("imageLinks") or {}
     if "thumbnail" in image_links:
-        cover_url = image_links["thumbnail"]
+        cover_url = _normalize_google_cover_url(image_links["thumbnail"])
     return BookResult(
         id=item["id"],
         title=info.get("title", "Unknown"),
@@ -35,20 +45,41 @@ def _normalize_gb(item: dict) -> BookResult | None:
     )
 
 
-async def _search_google_books(q: str) -> list[BookResult]:
-    api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
-    if not api_key:
-        return []
-    params = {"q": q, "maxResults": SEARCH_LIMIT, "key": api_key}
-    async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
-        response = await client.get(GOOGLE_BOOKS_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+async def _fetch_google_books(client: httpx.AsyncClient, q: str, api_key: str) -> list[BookResult]:
+    params = {
+        "q": q,
+        "maxResults": SEARCH_LIMIT,
+        "printType": "books",
+        "key": api_key,
+    }
+    response = await client.get(GOOGLE_BOOKS_URL, params=params)
+    response.raise_for_status()
+    data = response.json()
     results = []
     for item in data.get("items") or []:
         book = _normalize_gb(item)
         if book is not None:
             results.append(book)
+    return results
+
+
+async def _search_google_books(q: str) -> list[BookResult]:
+    api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
+    if not api_key:
+        return []
+
+    results: list[BookResult] = []
+    seen_ids: set[str] = set()
+    async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
+        for query in _google_books_queries(q):
+            books = await _fetch_google_books(client, query, api_key)
+            for book in books:
+                if book.id in seen_ids:
+                    continue
+                seen_ids.add(book.id)
+                results.append(book)
+                if len(results) == SEARCH_LIMIT:
+                    return results
     return results
 
 
