@@ -1,7 +1,6 @@
-import pytest
 import httpx
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from hon.main import app
 
@@ -22,9 +21,9 @@ def test_search_returns_books_with_page_count():
             "cover_i": 8739161,
         }
     ]
-    mock_response = AsyncMock()
+    mock_response = MagicMock()
     mock_response.json.return_value = make_ol_response(mock_docs)
-    mock_response.raise_for_status = AsyncMock()
+    mock_response.raise_for_status = MagicMock()
 
     with patch("hon.routers.books.httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -54,9 +53,9 @@ def test_search_filters_books_without_page_count():
             # number_of_pages_median intentionally missing
         }
     ]
-    mock_response = AsyncMock()
+    mock_response = MagicMock()
     mock_response.json.return_value = make_ol_response(mock_docs)
-    mock_response.raise_for_status = AsyncMock()
+    mock_response.raise_for_status = MagicMock()
 
     with patch("hon.routers.books.httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -86,7 +85,7 @@ def test_search_returns_gateway_timeout_when_upstream_times_out():
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.get = AsyncMock(side_effect=httpx.ReadTimeout("timed out"))
+        mock_client.get = AsyncMock(side_effect=httpx.ReadTimeout("timed out", request=None))
         mock_client_class.return_value = mock_client
 
         response = client.get("/books/search?q=lord")
@@ -105,9 +104,9 @@ def test_search_handles_missing_cover():
             # cover_i intentionally missing
         }
     ]
-    mock_response = AsyncMock()
+    mock_response = MagicMock()
     mock_response.json.return_value = make_ol_response(mock_docs)
-    mock_response.raise_for_status = AsyncMock()
+    mock_response.raise_for_status = MagicMock()
 
     with patch("hon.routers.books.httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()

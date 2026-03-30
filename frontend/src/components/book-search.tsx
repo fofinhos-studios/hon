@@ -83,6 +83,12 @@ export function BookSearch({ onAdd }: Props) {
         </p>
       )}
 
+      <p class="sr-only" aria-live="polite" aria-atomic="true">
+        {!loading && results.length > 0
+          ? `${results.length} result${results.length === 1 ? "" : "s"} found`
+          : ""}
+      </p>
+
       {results.length > 0 && (
         <ul class="book-search__results" id="book-search-results">
           {results.map((book) => (

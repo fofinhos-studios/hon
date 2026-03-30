@@ -1,5 +1,3 @@
-import inspect
-
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
@@ -20,7 +18,7 @@ def _parse_work_id(key: str) -> str:
 
 def _normalize(doc: dict) -> BookResult | None:
     page_count = doc.get("number_of_pages_median")
-    if not page_count:
+    if not page_count or page_count < 1:
         return None
 
     cover_id = doc.get("cover_i")
@@ -38,12 +36,6 @@ def _normalize(doc: dict) -> BookResult | None:
     )
 
 
-async def _resolve(value):
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 @router.get("/search", response_model=list[BookResult])
 async def search_books(q: str = Query(..., min_length=3)) -> list[BookResult]:
     params = {
@@ -54,8 +46,8 @@ async def search_books(q: str = Query(..., min_length=3)) -> list[BookResult]:
     try:
         async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
             response = await client.get(OPENLIBRARY_SEARCH_URL, params=params)
-            await _resolve(response.raise_for_status())
-            data = await _resolve(response.json())
+            response.raise_for_status()
+            data = response.json()
     except httpx.ReadTimeout as exc:
         raise HTTPException(status_code=504, detail="Book search timed out") from exc
     except httpx.HTTPError as exc:

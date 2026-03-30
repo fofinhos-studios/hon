@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   calculatePagesPerDay,
   calculateSchedule,
@@ -21,7 +21,8 @@ export function ReadingPlanner({ books }: Props) {
   const [pagesPerDay, setPagesPerDay] = useState(DEFAULT_PAGES_PER_DAY);
   const [finishDate, setFinishDate] = useState("");
   const [method, setMethod] = useState<ReadingMethod>("sequential");
-  const [lastChanged, setLastChanged] = useState<"pages" | "date">("pages");
+  // Ref (not state) so changes to direction don't themselves trigger the effect.
+  const lastChangedRef = useRef<"pages" | "date">("pages");
 
   const totalPages = books.reduce((sum, b) => sum + b.page_count, 0);
   const today = todayISO();
@@ -32,7 +33,7 @@ export function ReadingPlanner({ books }: Props) {
       return;
     }
 
-    if (lastChanged === "pages") {
+    if (lastChangedRef.current === "pages") {
       const result = calculateSchedule(
         books,
         readingDays,
@@ -51,16 +52,7 @@ export function ReadingPlanner({ books }: Props) {
       );
       if (ppd > 0) setPagesPerDay(ppd);
     }
-  }, [
-    books,
-    readingDays,
-    pagesPerDay,
-    finishDate,
-    method,
-    lastChanged,
-    today,
-    totalPages,
-  ]);
+  }, [books, readingDays, pagesPerDay, finishDate, method, today, totalPages]);
 
   const schedule: ScheduleResult | null =
     books.length > 0 && readingDays.length > 0 && pagesPerDay > 0
@@ -68,18 +60,18 @@ export function ReadingPlanner({ books }: Props) {
       : null;
 
   const handlePagesChange = (value: number) => {
-    setLastChanged("pages");
+    lastChangedRef.current = "pages";
     setPagesPerDay(value);
   };
 
   const handleDateChange = (value: string) => {
-    setLastChanged("date");
+    lastChangedRef.current = "date";
     setFinishDate(value);
   };
 
   const noDaysWarning = readingDays.length === 0;
   const dateTooSoonWarning =
-    lastChanged === "date" && finishDate && finishDate < today;
+    lastChangedRef.current === "date" && finishDate && finishDate < today;
 
   return (
     <div class="reading-planner">
