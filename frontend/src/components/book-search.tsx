@@ -12,6 +12,7 @@ export function BookSearch({ onAdd }: Props) {
   const [results, setResults] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [usingFallback, setUsingFallback] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
 
@@ -22,6 +23,7 @@ export function BookSearch({ onAdd }: Props) {
 
     setQuery(value);
     setError("");
+    setUsingFallback(false);
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -34,10 +36,11 @@ export function BookSearch({ onAdd }: Props) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const books = await searchBooks(trimmed);
+        const { books, source } = await searchBooks(trimmed);
         if (requestId !== requestIdRef.current) return;
         setError("");
         setResults(books);
+        setUsingFallback(source === "open_library");
       } catch (err) {
         if (requestId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : "Search failed");
@@ -54,6 +57,7 @@ export function BookSearch({ onAdd }: Props) {
     onAdd(book);
     setQuery("");
     setResults([]);
+    setUsingFallback(false);
   };
 
   return (
@@ -117,6 +121,12 @@ export function BookSearch({ onAdd }: Props) {
             </li>
           ))}
         </ul>
+      )}
+
+      {usingFallback && results.length > 0 && (
+        <p class="book-search__fallback-note hon-mono">
+          Results via OpenLibrary
+        </p>
       )}
     </div>
   );
