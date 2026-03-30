@@ -61,7 +61,7 @@ export function BookSearch({ onAdd }: Props) {
   };
 
   return (
-    <div class="book-search">
+    <div class="book-search" aria-busy={loading ? "true" : "false"}>
       <div class="book-search__input-wrap">
         <Search class="book-search__icon" size={16} aria-hidden="true" />
         <input
@@ -78,7 +78,12 @@ export function BookSearch({ onAdd }: Props) {
 
       {loading && (
         <p class="book-search__status hon-mono" aria-live="polite">
-          Searching…
+          <span class="book-search__status-indicator" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          Searching catalog…
         </p>
       )}
       {error && (
@@ -94,9 +99,9 @@ export function BookSearch({ onAdd }: Props) {
       </p>
 
       {results.length > 0 && (
-        <ul class="book-search__results" id="book-search-results">
-          {results.map((book) => (
-            <li key={book.id}>
+        <ul class="book-search__results book-search__results--visible" id="book-search-results">
+          {results.map((book, index) => (
+            <li key={book.id} class={`book-search__result-item book-search__result-item--${Math.min(index, 5)}`}>
               <button
                 type="button"
                 class="book-search__result"

@@ -6,3 +6,6 @@ src/hon.egg-info/SOURCES.txt
 src/hon.egg-info/dependency_links.txt
 src/hon.egg-info/requires.txt
 src/hon.egg-info/top_level.txt
+src/hon/models/book.py
+src/hon/routers/books.py
+tests/test_books.py

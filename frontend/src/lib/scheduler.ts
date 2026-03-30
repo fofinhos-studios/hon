@@ -109,6 +109,43 @@ function nextReadingDayAfter(
   return firstReadingDay(next, readingDays);
 }
 
+function allocateWeightedPages(
+  remainingPages: number[],
+  budget: number,
+): number[] {
+  const totalRemaining = remainingPages.reduce((sum, pages) => sum + pages, 0);
+  const dayBudget = Math.min(budget, totalRemaining);
+  const exactShares = remainingPages.map(
+    (pages) => (dayBudget * pages) / totalRemaining,
+  );
+  const allocations = exactShares.map((share, index) =>
+    Math.min(remainingPages[index], Math.floor(share)),
+  );
+
+  let assigned = allocations.reduce((sum, pages) => sum + pages, 0);
+  while (assigned < dayBudget) {
+    const nextIndex = exactShares
+      .map((share, index) => ({
+        index,
+        remainder: share - allocations[index],
+        remaining: remainingPages[index] - allocations[index],
+      }))
+      .filter((entry) => entry.remaining > 0)
+      .sort(
+        (a, b) =>
+          b.remainder - a.remainder ||
+          b.remaining - a.remaining ||
+          a.index - b.index,
+      )[0]?.index;
+
+    if (nextIndex === undefined) break;
+    allocations[nextIndex] += 1;
+    assigned += 1;
+  }
+
+  return allocations;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -137,17 +174,66 @@ export function calculateSchedule(
   const totalReadingDays = Math.ceil(totalPages / pagesPerDay);
 
   if (method === "interleaved") {
-    const start = firstReadingDay(startDateISO, readingDays);
-    const finish = addReadingDays(start, readingDays, totalReadingDays);
-    const bookSchedules: BookSchedule[] = books.map((book) => ({
+    const firstDay = firstReadingDay(startDateISO, readingDays);
+    const states = books.map((book) => ({
       book,
-      start_date: start,
-      finish_date: finish,
+      remaining: book.page_count,
+      start_date: "",
+      finish_date: "",
+      pages_read: 0,
+      reading_days_used: 0,
     }));
+
+    let currentDay = firstDay;
+    let readingDayCount = 0;
+
+    while (states.some((state) => state.remaining > 0)) {
+      const activeIndices = states.flatMap((state, index) =>
+        state.remaining > 0 ? [index] : [],
+      );
+      const allocations = allocateWeightedPages(
+        activeIndices.map((index) => states[index].remaining),
+        pagesPerDay,
+      );
+
+      activeIndices.forEach((stateIndex, allocationIndex) => {
+        const allocation = allocations[allocationIndex] ?? 0;
+        if (allocation <= 0) return;
+
+        const state = states[stateIndex];
+        if (!state.start_date) {
+          state.start_date = currentDay;
+        }
+        state.remaining -= allocation;
+        state.pages_read += allocation;
+        state.reading_days_used += 1;
+        state.finish_date = currentDay;
+      });
+
+      readingDayCount += 1;
+      if (states.every((state) => state.remaining === 0)) break;
+      currentDay = nextReadingDayAfter(currentDay, readingDays);
+    }
+
+    const bookSchedules: BookSchedule[] = states.map((state) => ({
+      book: state.book,
+      start_date: state.start_date || firstDay,
+      finish_date: state.finish_date || firstDay,
+      daily_pages:
+        state.reading_days_used > 0
+          ? Math.round(state.pages_read / state.reading_days_used)
+          : undefined,
+    }));
+    const finish = bookSchedules.reduce(
+      (latest, schedule) =>
+        schedule.finish_date > latest ? schedule.finish_date : latest,
+      firstDay,
+    );
+
     return {
       books: bookSchedules,
       total_pages: totalPages,
-      total_reading_days: totalReadingDays,
+      total_reading_days: readingDayCount,
       finish_date: finish,
     };
   }

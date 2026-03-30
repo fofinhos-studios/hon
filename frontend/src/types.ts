@@ -28,6 +28,7 @@ export interface BookSchedule {
   book: Book;
   start_date: string; // ISO YYYY-MM-DD
   finish_date: string; // ISO YYYY-MM-DD — last reading day for this book
+  daily_pages?: number;
 }
 
 export interface ScheduleResult {

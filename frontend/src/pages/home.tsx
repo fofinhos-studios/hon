@@ -1,5 +1,5 @@
-import { BookOpen } from "lucide-preact";
 import { useState } from "preact/hooks";
+import { Library } from "lucide-preact";
 import { BookList } from "../components/book-list";
 import { BookSearch } from "../components/book-search";
 import { ReadingPlanner } from "../components/reading-planner";
@@ -17,24 +17,39 @@ export function HomePage() {
     setBooks((prev) => prev.filter((b) => b.id !== id));
   };
 
+  const reorderBooks = (nextBooks: Book[]) => {
+    setBooks(nextBooks);
+  };
+
   return (
     <div class="hon-shell">
       <header class="hon-header">
-        <BookOpen size={18} class="hon-header__icon" aria-hidden="true" />
-        <span class="hon-brand">hon</span>
+        <span class="hon-mark" data-char="本" aria-hidden="true">
+          本
+        </span>
+        <div class="hon-brand-lockup">
+          <span class="hon-brand">hon</span>
+          <span class="hon-brand-subtitle">reading planner</span>
+        </div>
       </header>
 
       <div class="hon-dashboard">
         <aside class="hon-panel">
-          <p class="hon-section-title">Your books</p>
+          <p class="hon-section-title">
+            <Library size={14} aria-hidden="true" />
+            <span>Your books</span>
+          </p>
           <BookSearch onAdd={addBook} />
           <div class="hon-panel__list-wrap">
-            <BookList books={books} onRemove={removeBook} />
+            <BookList
+              books={books}
+              onRemove={removeBook}
+              onReorder={reorderBooks}
+            />
           </div>
         </aside>
 
         <main class="hon-panel hon-panel--right">
-          <p class="hon-section-title">Reading plan</p>
           <ReadingPlanner books={books} />
         </main>
       </div>

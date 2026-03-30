@@ -71,7 +71,7 @@ def _mock_client(get_return=None, get_side_effect=None):
 # ── Google Books — primary path ────────────────────────────────────────────
 
 def test_google_books_queries_title_then_author_then_broad_with_print_type_books():
-    responses = [{}, {}, make_gb_response([gb_item(authors=["Frank Herbert"])])]
+    responses = [make_gb_response([gb_item(id=f"title-{i}") for i in range(4)]), {}, make_gb_response([gb_item(authors=["Frank Herbert"])])]
     requests: list[dict] = []
     call_count = 0
 
@@ -96,6 +96,26 @@ def test_google_books_queries_title_then_author_then_broad_with_print_type_books
         "dune",
     ]
     assert all(request["params"]["printType"] == "books" for request in requests[:3])
+
+
+def test_google_books_stops_after_title_pass_when_enough_results():
+    title_data = make_gb_response([gb_item(id=f"title-{i}") for i in range(5)])
+    requests: list[dict] = []
+
+    async def get_side_effect(url, **kwargs):
+        requests.append({"url": url, "params": kwargs["params"]})
+        resp = MagicMock()
+        resp.json.return_value = title_data
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    with patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "test-key"}), \
+         patch("hon.routers.books.httpx.AsyncClient", return_value=_mock_client(get_side_effect=get_side_effect)):
+        response = client.get("/books/search?q=dune")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "google_books"
+    assert [request["params"]["q"] for request in requests] == ["intitle:dune"]
 
 
 def test_google_books_dedupes_results_across_query_passes():
