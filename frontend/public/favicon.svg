@@ -1,0 +1,21 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="64"
+  height="64"
+  viewBox="0 0 64 64"
+  fill="none"
+>
+  <rect width="64" height="64" rx="14" fill="#ffffff" />
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#111111" stroke-width="3" />
+  <text
+    x="32"
+    y="41"
+    text-anchor="middle"
+    font-size="34"
+    font-family="'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif"
+    font-weight="700"
+    fill="#c59a32"
+  >
+    本
+  </text>
+</svg>
