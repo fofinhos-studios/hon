@@ -11,10 +11,13 @@ import type {
 /** ISO YYYY-MM-DD for today (local time) */
 export function todayISO(): string {
   const d = new Date();
-  return toISO(d);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-/** Convert a Date to ISO YYYY-MM-DD string */
+/** Convert a UTC Date to ISO YYYY-MM-DD string */
 function toISO(d: Date): string {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -75,6 +78,7 @@ export function addReadingDays(
   n: number,
 ): string {
   if (n <= 0) return startISO;
+  if (readingDays.length === 0) throw new Error("readingDays must not be empty");
   const daySet = new Set(readingDays);
   let count = 0;
   let current = parseISO(startISO);
@@ -158,12 +162,19 @@ export function calculateSchedule(
     currentStart = nextReadingDayAfter(finish, readingDays);
   }
 
+  // Sum per-book ceil'd days to stay consistent with the actual schedule dates.
+  // Math.ceil is not distributive over addition, so re-using totalReadingDays
+  // (computed from totalPages) could disagree with the span of bookSchedules.
+  const actualTotalReadingDays = bookSchedules.reduce(
+    (sum, bs) => sum + Math.ceil(bs.book.page_count / pagesPerDay),
+    0,
+  );
   const lastFinish =
     bookSchedules[bookSchedules.length - 1]?.finish_date ?? startDateISO;
   return {
     books: bookSchedules,
     total_pages: totalPages,
-    total_reading_days: totalReadingDays,
+    total_reading_days: actualTotalReadingDays,
     finish_date: lastFinish,
   };
 }
