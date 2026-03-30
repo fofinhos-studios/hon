@@ -11,6 +11,7 @@ GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 OPENLIBRARY_COVER_URL = "https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
 SEARCH_LIMIT = 10
+EARLY_RETURN_RESULT_COUNT = 5
 SEARCH_TIMEOUT_SECONDS = 15.0
 
 
@@ -71,7 +72,7 @@ async def _search_google_books(q: str) -> list[BookResult]:
     results: list[BookResult] = []
     seen_ids: set[str] = set()
     async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
-        for query in _google_books_queries(q):
+        for index, query in enumerate(_google_books_queries(q)):
             books = await _fetch_google_books(client, query, api_key)
             for book in books:
                 if book.id in seen_ids:
@@ -80,6 +81,8 @@ async def _search_google_books(q: str) -> list[BookResult]:
                 results.append(book)
                 if len(results) == SEARCH_LIMIT:
                     return results
+            if index == 0 and len(results) >= EARLY_RETURN_RESULT_COUNT:
+                return results
     return results
 
 

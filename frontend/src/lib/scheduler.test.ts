@@ -125,6 +125,23 @@ describe("calculateSchedule interleaved", () => {
     expect(result.books[0].finish_date).toBe(result.books[1].finish_date);
     expect(result.total_pages).toBe(200);
   });
+
+  test("treats pages per day as a shared weighted budget across books", () => {
+    const books = [makeBook("short", 100), makeBook("long", 200)];
+    const result = calculateSchedule(
+      books,
+      EVERY_DAY,
+      30,
+      "interleaved",
+      "2026-01-05",
+    );
+
+    expect(result.total_pages).toBe(300);
+    expect(result.total_reading_days).toBe(10);
+    expect(result.finish_date).toBe("2026-01-14");
+    expect((result.books[0] as { daily_pages?: number }).daily_pages).toBe(10);
+    expect((result.books[1] as { daily_pages?: number }).daily_pages).toBe(20);
+  });
 });
 
 describe("calculatePagesPerDay", () => {
