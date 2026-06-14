@@ -1,5 +1,5 @@
-import { useState } from "preact/hooks";
 import { Library } from "lucide-preact";
+import { useState } from "preact/hooks";
 import { BookList } from "../components/book-list";
 import { BookSearch } from "../components/book-search";
 import { ReadingPlanner } from "../components/reading-planner";
@@ -19,6 +19,12 @@ export function HomePage() {
 
   const reorderBooks = (nextBooks: Book[]) => {
     setBooks(nextBooks);
+  };
+
+  const updateProgress = (id: string, pagesRead: number | undefined) => {
+    setBooks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, pages_read: pagesRead } : b)),
+    );
   };
 
   return (
@@ -45,6 +51,7 @@ export function HomePage() {
               books={books}
               onRemove={removeBook}
               onReorder={reorderBooks}
+              onUpdateProgress={updateProgress}
             />
           </div>
         </aside>

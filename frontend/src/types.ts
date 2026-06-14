@@ -20,6 +20,7 @@ export interface Book {
   author: string;
   page_count: number;
   cover_url: string | null;
+  pages_read?: number;
 }
 
 export type ReadingMethod = "sequential" | "interleaved";

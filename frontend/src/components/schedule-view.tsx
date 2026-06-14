@@ -34,7 +34,9 @@ export function ScheduleView({ result, pagesPerDay, method }: Props) {
             <div class="schedule-view__book-info">
               <span class="schedule-view__book-title">{book.title}</span>
               <span class="schedule-view__book-pages hon-mono">
-                {book.page_count.toLocaleString()}pp
+                {book.pages_read && book.pages_read > 0
+                  ? `${book.pages_read.toLocaleString()} / ${book.page_count.toLocaleString()} pp`
+                  : `${book.page_count.toLocaleString()} pp`}
               </span>
             </div>
             <div class="schedule-view__dates hon-mono">

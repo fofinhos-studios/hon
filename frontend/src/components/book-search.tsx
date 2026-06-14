@@ -99,9 +99,15 @@ export function BookSearch({ onAdd }: Props) {
       </p>
 
       {results.length > 0 && (
-        <ul class="book-search__results book-search__results--visible" id="book-search-results">
+        <ul
+          class="book-search__results book-search__results--visible"
+          id="book-search-results"
+        >
           {results.map((book, index) => (
-            <li key={book.id} class={`book-search__result-item book-search__result-item--${Math.min(index, 5)}`}>
+            <li
+              key={book.id}
+              class={`book-search__result-item book-search__result-item--${Math.min(index, 5)}`}
+            >
               <button
                 type="button"
                 class="book-search__result"

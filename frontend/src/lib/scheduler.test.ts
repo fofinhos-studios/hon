@@ -108,6 +108,42 @@ describe("calculateSchedule sequential", () => {
     );
     expect(result.total_reading_days).toBe(11);
   });
+
+  test("with pages read: finish date is ceil(remaining_pages/ppd) reading days from start", () => {
+    const book = makeBook("a", 100);
+    book.pages_read = 60; // 40 pages remaining
+    const result = calculateSchedule(
+      [book],
+      EVERY_DAY,
+      10,
+      "sequential",
+      "2026-01-05",
+    );
+    expect(result.books[0].start_date).toBe("2026-01-05");
+    expect(result.books[0].finish_date).toBe("2026-01-08"); // 4 days inclusive
+    expect(result.total_pages).toBe(40);
+    expect(result.total_reading_days).toBe(4);
+  });
+
+  test("completed book does not consume days and doesn't advance next book start", () => {
+    const bookA = makeBook("a", 100);
+    bookA.pages_read = 100; // completed
+    const bookB = makeBook("b", 50); // 50 pages remaining
+    const result = calculateSchedule(
+      [bookA, bookB],
+      EVERY_DAY,
+      10,
+      "sequential",
+      "2026-01-05",
+    );
+
+    expect(result.books[0].start_date).toBe("2026-01-05");
+    expect(result.books[0].finish_date).toBe("2026-01-05");
+    expect(result.books[1].start_date).toBe("2026-01-05");
+    expect(result.books[1].finish_date).toBe("2026-01-09"); // 5 reading days
+    expect(result.total_pages).toBe(50);
+    expect(result.total_reading_days).toBe(5);
+  });
 });
 
 describe("calculateSchedule interleaved", () => {
@@ -139,6 +175,25 @@ describe("calculateSchedule interleaved", () => {
     expect(result.total_pages).toBe(300);
     expect(result.total_reading_days).toBe(10);
     expect(result.finish_date).toBe("2026-01-14");
+    expect((result.books[0] as { daily_pages?: number }).daily_pages).toBe(10);
+    expect((result.books[1] as { daily_pages?: number }).daily_pages).toBe(20);
+  });
+
+  test("with pages read: remaining pages are allocated correctly", () => {
+    const bookA = makeBook("a", 100);
+    bookA.pages_read = 50; // 50 remaining
+    const bookB = makeBook("b", 100); // 100 remaining
+    const result = calculateSchedule(
+      [bookA, bookB],
+      EVERY_DAY,
+      30,
+      "interleaved",
+      "2026-01-05",
+    );
+
+    expect(result.total_pages).toBe(150);
+    expect(result.total_reading_days).toBe(5);
+    expect(result.finish_date).toBe("2026-01-09");
     expect((result.books[0] as { daily_pages?: number }).daily_pages).toBe(10);
     expect((result.books[1] as { daily_pages?: number }).daily_pages).toBe(20);
   });

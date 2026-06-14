@@ -78,7 +78,8 @@ export function addReadingDays(
   n: number,
 ): string {
   if (n <= 0) return startISO;
-  if (readingDays.length === 0) throw new Error("readingDays must not be empty");
+  if (readingDays.length === 0)
+    throw new Error("readingDays must not be empty");
   const daySet = new Set(readingDays);
   let count = 0;
   let current = parseISO(startISO);
@@ -170,14 +171,17 @@ export function calculateSchedule(
     return empty;
   }
 
-  const totalPages = books.reduce((sum, b) => sum + b.page_count, 0);
+  const totalPages = books.reduce(
+    (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
+    0,
+  );
   const totalReadingDays = Math.ceil(totalPages / pagesPerDay);
 
   if (method === "interleaved") {
     const firstDay = firstReadingDay(startDateISO, readingDays);
     const states = books.map((book) => ({
       book,
-      remaining: book.page_count,
+      remaining: Math.max(0, book.page_count - (book.pages_read || 0)),
       start_date: "",
       finish_date: "",
       pages_read: 0,
@@ -242,17 +246,28 @@ export function calculateSchedule(
   let currentStart = firstReadingDay(startDateISO, readingDays);
 
   for (const book of books) {
-    const daysNeeded = Math.ceil(book.page_count / pagesPerDay);
-    const finish = addReadingDays(currentStart, readingDays, daysNeeded);
+    const remaining = Math.max(0, book.page_count - (book.pages_read || 0));
+    const daysNeeded = Math.ceil(remaining / pagesPerDay);
+    const finish =
+      daysNeeded > 0
+        ? addReadingDays(currentStart, readingDays, daysNeeded)
+        : currentStart;
     bookSchedules.push({ book, start_date: currentStart, finish_date: finish });
-    currentStart = nextReadingDayAfter(finish, readingDays);
+    if (daysNeeded > 0) {
+      currentStart = nextReadingDayAfter(finish, readingDays);
+    }
   }
 
   // Sum per-book ceil'd days to stay consistent with the actual schedule dates.
   // Math.ceil is not distributive over addition, so re-using totalReadingDays
   // (computed from totalPages) could disagree with the span of bookSchedules.
   const actualTotalReadingDays = bookSchedules.reduce(
-    (sum, bs) => sum + Math.ceil(bs.book.page_count / pagesPerDay),
+    (sum, bs) =>
+      sum +
+      Math.ceil(
+        Math.max(0, bs.book.page_count - (bs.book.pages_read || 0)) /
+          pagesPerDay,
+      ),
     0,
   );
   const lastFinish =

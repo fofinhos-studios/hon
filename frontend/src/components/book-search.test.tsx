@@ -40,18 +40,16 @@ describe("BookSearch", () => {
   test("ignores stale failed searches once a newer search succeeds", async () => {
     let rejectFirst: ((error: Error) => void) | undefined;
     let resolveSecond:
-      | ((
-          value: {
-            books: Array<{
-              id: string;
-              title: string;
-              author: string;
-              page_count: number;
-              cover_url: null;
-            }>;
-            source: "google_books" | "open_library";
-          },
-        ) => void)
+      | ((value: {
+          books: Array<{
+            id: string;
+            title: string;
+            author: string;
+            page_count: number;
+            cover_url: null;
+          }>;
+          source: "google_books" | "open_library";
+        }) => void)
       | undefined;
 
     searchBooksMock.mockImplementation((query: string) => {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "preact/hooks";
 import { CalendarDays, Clock3, Route, Split } from "lucide-preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   calculatePagesPerDay,
   calculateSchedule,
@@ -25,7 +25,10 @@ export function ReadingPlanner({ books }: Props) {
   // Ref (not state) so changes to direction don't themselves trigger the effect.
   const lastChangedRef = useRef<"pages" | "date">("pages");
 
-  const totalPages = books.reduce((sum, b) => sum + b.page_count, 0);
+  const totalPages = books.reduce(
+    (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
+    0,
+  );
   const today = todayISO();
 
   useEffect(() => {

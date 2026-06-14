@@ -6,6 +6,7 @@ interface Props {
   books: Book[];
   onRemove: (id: string) => void;
   onReorder: (books: Book[]) => void;
+  onUpdateProgress: (id: string, pagesRead: number | undefined) => void;
 }
 
 const DRAG_THRESHOLD_PX = 8;
@@ -27,7 +28,11 @@ interface DragState {
   itemGap: number;
 }
 
-function reorderBooksByIndex(books: Book[], fromIndex: number, toIndex: number): Book[] {
+function reorderBooksByIndex(
+  books: Book[],
+  fromIndex: number,
+  toIndex: number,
+): Book[] {
   if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
     return books;
   }
@@ -38,7 +43,12 @@ function reorderBooksByIndex(books: Book[], fromIndex: number, toIndex: number):
   return nextBooks;
 }
 
-export function BookList({ books, onRemove, onReorder }: Props) {
+export function BookList({
+  books,
+  onRemove,
+  onReorder,
+  onUpdateProgress,
+}: Props) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -46,6 +56,8 @@ export function BookList({ books, onRemove, onReorder }: Props) {
   const handlePointerDown = (bookId: string, event: PointerEvent) => {
     if ("button" in event && event.button !== 0) return;
     if ((event.target as HTMLElement).closest(".book-list__remove")) return;
+    if ((event.target as HTMLElement).closest(".book-list__progress-input"))
+      return;
 
     const originIndex = books.findIndex((book) => book.id === bookId);
     if (originIndex < 0) return;
@@ -93,11 +105,14 @@ export function BookList({ books, onRemove, onReorder }: Props) {
       let targetIndex = currentState.originIndex;
       if (activated) {
         const originSlot = currentState.slots[currentState.originIndex];
-        const currentCenter =
-          originSlot.top + originSlot.height / 2 + deltaY;
+        const currentCenter = originSlot.top + originSlot.height / 2 + deltaY;
 
         if (deltaY > 0) {
-          for (let index = currentState.originIndex + 1; index < currentState.slots.length; index += 1) {
+          for (
+            let index = currentState.originIndex + 1;
+            index < currentState.slots.length;
+            index += 1
+          ) {
             const slotCenter =
               currentState.slots[index].top +
               currentState.slots[index].height / 2;
@@ -106,7 +121,11 @@ export function BookList({ books, onRemove, onReorder }: Props) {
             }
           }
         } else if (deltaY < 0) {
-          for (let index = currentState.originIndex - 1; index >= 0; index -= 1) {
+          for (
+            let index = currentState.originIndex - 1;
+            index >= 0;
+            index -= 1
+          ) {
             const slotCenter =
               currentState.slots[index].top +
               currentState.slots[index].height / 2;
@@ -191,6 +210,39 @@ export function BookList({ books, onRemove, onReorder }: Props) {
     return { transform: `translateY(${translateY}px)` };
   };
 
+  const handlePagesReadChange = (bookId: string, valueStr: string) => {
+    const targetBook = books.find((b) => b.id === bookId);
+    if (!targetBook) return;
+
+    if (valueStr === "") {
+      onUpdateProgress(bookId, undefined);
+      return;
+    }
+
+    const value = Number.parseInt(valueStr, 10);
+    if (Number.isNaN(value)) return;
+
+    const clamped = Math.max(0, Math.min(targetBook.page_count, value));
+    onUpdateProgress(bookId, clamped);
+  };
+
+  const handlePercentReadChange = (bookId: string, valueStr: string) => {
+    const targetBook = books.find((b) => b.id === bookId);
+    if (!targetBook) return;
+
+    if (valueStr === "") {
+      onUpdateProgress(bookId, undefined);
+      return;
+    }
+
+    const value = Number.parseInt(valueStr, 10);
+    if (Number.isNaN(value)) return;
+
+    const clampedPercent = Math.max(0, Math.min(100, value));
+    const pages = Math.round((clampedPercent / 100) * targetBook.page_count);
+    onUpdateProgress(bookId, pages);
+  };
+
   if (books.length === 0) {
     return (
       <div class="book-list-empty">
@@ -203,6 +255,10 @@ export function BookList({ books, onRemove, onReorder }: Props) {
   }
 
   const totalPages = books.reduce((sum, b) => sum + b.page_count, 0);
+  const totalRemainingPages = books.reduce(
+    (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
+    0,
+  );
 
   return (
     <div class="book-list">
@@ -215,7 +271,10 @@ export function BookList({ books, onRemove, onReorder }: Props) {
             }}
             data-book-id={book.id}
             class={`book-list__item${dragState?.bookId === book.id && dragState.activated ? " book-list__item--dragging" : ""}${dragState?.targetIndex === books.findIndex((candidate) => candidate.id === book.id) && dragState?.targetIndex !== dragState?.originIndex ? " book-list__item--drop-target" : ""}`}
-            style={getItemStyle(books.findIndex((candidate) => candidate.id === book.id), book.id)}
+            style={getItemStyle(
+              books.findIndex((candidate) => candidate.id === book.id),
+              book.id,
+            )}
             onPointerDown={(event) => handlePointerDown(book.id, event)}
           >
             <span class="book-list__drag-handle" aria-hidden="true">
@@ -236,6 +295,52 @@ export function BookList({ books, onRemove, onReorder }: Props) {
               <span class="book-list__meta hon-mono">
                 {book.author} · {book.page_count}pp
               </span>
+              <div
+                class="book-list__progress-row"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <span class="book-list__progress-label">Read:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max={book.page_count}
+                  placeholder="0"
+                  value={book.pages_read ?? ""}
+                  onInput={(e) =>
+                    handlePagesReadChange(
+                      book.id,
+                      (e.target as HTMLInputElement).value,
+                    )
+                  }
+                  class="hon-input book-list__progress-input hon-mono"
+                  aria-label={`Pages read for ${book.title}`}
+                />
+                <span class="book-list__progress-slash">/</span>
+                <span class="book-list__progress-total hon-mono">
+                  {book.page_count} pp
+                </span>
+                <span class="book-list__progress-or">or</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  value={
+                    book.pages_read !== undefined
+                      ? Math.round((book.pages_read / book.page_count) * 100)
+                      : ""
+                  }
+                  onInput={(e) =>
+                    handlePercentReadChange(
+                      book.id,
+                      (e.target as HTMLInputElement).value,
+                    )
+                  }
+                  class="hon-input book-list__progress-input hon-mono"
+                  aria-label={`Percentage read for ${book.title}`}
+                />
+                <span class="book-list__progress-percent hon-mono">%</span>
+              </div>
             </div>
             <button
               type="button"
@@ -251,7 +356,8 @@ export function BookList({ books, onRemove, onReorder }: Props) {
       </ul>
       <p class="book-list__total hon-mono">
         {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
-        {totalPages.toLocaleString()} pages total
+        {totalRemainingPages.toLocaleString()} / {totalPages.toLocaleString()}{" "}
+        pages left
       </p>
     </div>
   );
