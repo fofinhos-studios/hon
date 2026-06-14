@@ -1,4 +1,5 @@
 import { BookOpen, GripVertical, X } from "lucide-preact";
+import type { JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import type { Book } from "../types";
 
@@ -41,6 +42,136 @@ function reorderBooksByIndex(
   const [draggedBook] = nextBooks.splice(fromIndex, 1);
   nextBooks.splice(toIndex, 0, draggedBook);
   return nextBooks;
+}
+
+export interface BookCardProps {
+  book: Book;
+  index: number;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  style?: JSX.CSSProperties;
+  onPointerDown: (event: PointerEvent) => void;
+  onRemove: () => void;
+  onUpdateProgress: (pagesRead: number | undefined) => void;
+  itemRef: (element: HTMLLIElement | null) => void;
+}
+
+export function BookCard({
+  book,
+  index,
+  isDragging,
+  isDropTarget,
+  style,
+  onPointerDown,
+  onRemove,
+  onUpdateProgress,
+  itemRef,
+}: BookCardProps) {
+  const handlePagesReadChange = (valueStr: string) => {
+    if (valueStr === "") {
+      onUpdateProgress(undefined);
+      return;
+    }
+
+    const value = Number.parseInt(valueStr, 10);
+    if (Number.isNaN(value)) return;
+
+    const clamped = Math.max(0, Math.min(book.page_count, value));
+    onUpdateProgress(clamped);
+  };
+
+  const handlePercentReadChange = (valueStr: string) => {
+    if (valueStr === "") {
+      onUpdateProgress(undefined);
+      return;
+    }
+
+    const value = Number.parseInt(valueStr, 10);
+    if (Number.isNaN(value)) return;
+
+    const clampedPercent = Math.max(0, Math.min(100, value));
+    const pages = Math.round((clampedPercent / 100) * book.page_count);
+    onUpdateProgress(pages);
+  };
+
+  return (
+    <li
+      ref={itemRef}
+      data-book-id={book.id}
+      class={`book-list__item${isDragging ? " book-list__item--dragging" : ""}${isDropTarget ? " book-list__item--drop-target" : ""}`}
+      style={style}
+      onPointerDown={onPointerDown}
+    >
+      <span class="book-list__drag-handle" aria-hidden="true">
+        <GripVertical size={16} aria-hidden="true" />
+      </span>
+      {book.cover_url && (
+        <img
+          class="book-list__cover"
+          src={book.cover_url}
+          alt=""
+          draggable="false"
+          width={28}
+          height={42}
+        />
+      )}
+      <div class="book-list__info">
+        <span class="book-list__title">{book.title}</span>
+        <span class="book-list__meta hon-mono">
+          {book.author} · {book.page_count}pp
+        </span>
+        <div
+          class="book-list__progress-row"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span class="book-list__progress-label">Read:</span>
+          <input
+            type="number"
+            min="0"
+            max={book.page_count}
+            placeholder="0"
+            value={book.pages_read ?? ""}
+            onInput={(e) =>
+              handlePagesReadChange((e.target as HTMLInputElement).value)
+            }
+            class="hon-input book-list__progress-input hon-mono"
+            aria-label={`Pages read for ${book.title}`}
+          />
+          <span class="book-list__progress-slash">/</span>
+          <span class="book-list__progress-total hon-mono">
+            {book.page_count} pp
+          </span>
+          <span class="book-list__progress-or">or</span>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            placeholder="0"
+            value={
+              book.pages_read !== undefined
+                ? Math.round((book.pages_read / book.page_count) * 100)
+                : ""
+            }
+            onInput={(e) =>
+              handlePercentReadChange((e.target as HTMLInputElement).value)
+            }
+            class="hon-input book-list__progress-input hon-mono"
+            aria-label={`Percentage read for ${book.title}`}
+          />
+          <span class="book-list__progress-percent hon-mono">%</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="book-list__remove"
+        aria-label={`Remove ${book.title}`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={onRemove}
+      >
+        <X size={14} aria-hidden="true" />
+      </button>
+    </li>
+  );
 }
 
 export function BookList({
@@ -210,39 +341,6 @@ export function BookList({
     return { transform: `translateY(${translateY}px)` };
   };
 
-  const handlePagesReadChange = (bookId: string, valueStr: string) => {
-    const targetBook = books.find((b) => b.id === bookId);
-    if (!targetBook) return;
-
-    if (valueStr === "") {
-      onUpdateProgress(bookId, undefined);
-      return;
-    }
-
-    const value = Number.parseInt(valueStr, 10);
-    if (Number.isNaN(value)) return;
-
-    const clamped = Math.max(0, Math.min(targetBook.page_count, value));
-    onUpdateProgress(bookId, clamped);
-  };
-
-  const handlePercentReadChange = (bookId: string, valueStr: string) => {
-    const targetBook = books.find((b) => b.id === bookId);
-    if (!targetBook) return;
-
-    if (valueStr === "") {
-      onUpdateProgress(bookId, undefined);
-      return;
-    }
-
-    const value = Number.parseInt(valueStr, 10);
-    if (Number.isNaN(value)) return;
-
-    const clampedPercent = Math.max(0, Math.min(100, value));
-    const pages = Math.round((clampedPercent / 100) * targetBook.page_count);
-    onUpdateProgress(bookId, pages);
-  };
-
   if (books.length === 0) {
     return (
       <div class="book-list-empty">
@@ -263,96 +361,33 @@ export function BookList({
   return (
     <div class="book-list">
       <ul class="book-list__items">
-        {books.map((book) => (
-          <li
-            key={book.id}
-            ref={(element) => {
-              itemRefs.current[book.id] = element;
-            }}
-            data-book-id={book.id}
-            class={`book-list__item${dragState?.bookId === book.id && dragState.activated ? " book-list__item--dragging" : ""}${dragState?.targetIndex === books.findIndex((candidate) => candidate.id === book.id) && dragState?.targetIndex !== dragState?.originIndex ? " book-list__item--drop-target" : ""}`}
-            style={getItemStyle(
-              books.findIndex((candidate) => candidate.id === book.id),
-              book.id,
-            )}
-            onPointerDown={(event) => handlePointerDown(book.id, event)}
-          >
-            <span class="book-list__drag-handle" aria-hidden="true">
-              <GripVertical size={16} aria-hidden="true" />
-            </span>
-            {book.cover_url && (
-              <img
-                class="book-list__cover"
-                src={book.cover_url}
-                alt=""
-                draggable="false"
-                width={28}
-                height={42}
-              />
-            )}
-            <div class="book-list__info">
-              <span class="book-list__title">{book.title}</span>
-              <span class="book-list__meta hon-mono">
-                {book.author} · {book.page_count}pp
-              </span>
-              <div
-                class="book-list__progress-row"
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <span class="book-list__progress-label">Read:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max={book.page_count}
-                  placeholder="0"
-                  value={book.pages_read ?? ""}
-                  onInput={(e) =>
-                    handlePagesReadChange(
-                      book.id,
-                      (e.target as HTMLInputElement).value,
-                    )
-                  }
-                  class="hon-input book-list__progress-input hon-mono"
-                  aria-label={`Pages read for ${book.title}`}
-                />
-                <span class="book-list__progress-slash">/</span>
-                <span class="book-list__progress-total hon-mono">
-                  {book.page_count} pp
-                </span>
-                <span class="book-list__progress-or">or</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="0"
-                  value={
-                    book.pages_read !== undefined
-                      ? Math.round((book.pages_read / book.page_count) * 100)
-                      : ""
-                  }
-                  onInput={(e) =>
-                    handlePercentReadChange(
-                      book.id,
-                      (e.target as HTMLInputElement).value,
-                    )
-                  }
-                  class="hon-input book-list__progress-input hon-mono"
-                  aria-label={`Percentage read for ${book.title}`}
-                />
-                <span class="book-list__progress-percent hon-mono">%</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="book-list__remove"
-              aria-label={`Remove ${book.title}`}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => onRemove(book.id)}
-            >
-              <X size={14} aria-hidden="true" />
-            </button>
-          </li>
-        ))}
+        {books.map((book, index) => {
+          const isDragging =
+            dragState?.bookId === book.id && dragState.activated;
+          const isDropTarget =
+            dragState?.targetIndex === index &&
+            dragState?.targetIndex !== dragState?.originIndex;
+          const style = getItemStyle(index, book.id);
+
+          return (
+            <BookCard
+              key={book.id}
+              book={book}
+              index={index}
+              isDragging={isDragging}
+              isDropTarget={isDropTarget}
+              style={style}
+              onPointerDown={(event) => handlePointerDown(book.id, event)}
+              onRemove={() => onRemove(book.id)}
+              onUpdateProgress={(pagesRead) =>
+                onUpdateProgress(book.id, pagesRead)
+              }
+              itemRef={(element) => {
+                itemRefs.current[book.id] = element;
+              }}
+            />
+          );
+        })}
       </ul>
       <p class="book-list__total hon-mono">
         {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
