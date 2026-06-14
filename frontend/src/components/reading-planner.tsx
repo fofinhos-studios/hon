@@ -8,6 +8,7 @@ import {
 import type { Book, DayOfWeek, ReadingMethod, ScheduleResult } from "../types";
 import { DayPicker } from "./day-picker";
 import { ScheduleView } from "./schedule-view";
+import { Tooltip } from "./tooltip";
 
 const DEFAULT_PAGES_PER_DAY = 30;
 const MIN_PAGES = 1;
@@ -83,6 +84,7 @@ export function ReadingPlanner({ books }: Props) {
         <p class="hon-section-title">
           <CalendarDays size={14} aria-hidden="true" />
           <span>Reading days</span>
+          <Tooltip content="Select the days of the week you plan to read. The planner distributes your page target only on these selected days." />
         </p>
         <DayPicker selected={readingDays} onChange={setReadingDays} />
         {noDaysWarning && (
@@ -100,6 +102,7 @@ export function ReadingPlanner({ books }: Props) {
             <label class="reading-planner__label" for="ppd-input">
               <Clock3 size={13} aria-hidden="true" />
               <span>Pages per day</span>
+              <Tooltip content="Set your daily page budget. The planner calculates the exact dates you will finish each book based on this speed." />
             </label>
             <div class="reading-planner__ppd">
               <input
@@ -140,6 +143,7 @@ export function ReadingPlanner({ books }: Props) {
             <label class="reading-planner__label" for="finish-input">
               <CalendarDays size={13} aria-hidden="true" />
               <span>Finish by</span>
+              <Tooltip content="Choose your target deadline. The planner calculates how many pages per day are required to complete your books by this date." />
             </label>
             <input
               class="hon-input hon-mono reading-planner__date-input"
@@ -167,6 +171,7 @@ export function ReadingPlanner({ books }: Props) {
         <p class="hon-section-title">
           <Split size={14} aria-hidden="true" />
           <span>Reading method</span>
+          <Tooltip content="Choose 'Sequential' to read and finish books one-by-one in order, or 'Interleaved' to read all books concurrently with a shared daily page budget." />
         </p>
         <fieldset
           class="reading-planner__method-group"
@@ -197,6 +202,7 @@ export function ReadingPlanner({ books }: Props) {
         <p class="hon-section-title">
           <Route size={14} aria-hidden="true" />
           <span>Schedule</span>
+          <Tooltip content="Your generated reading calendar. Shows start and target finish dates for each book based on your speed, progress, and reading days." />
         </p>
         {books.length === 0 ? (
           <p class="reading-planner__empty">Add books to get started.</p>

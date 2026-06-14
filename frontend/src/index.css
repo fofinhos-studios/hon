@@ -871,3 +871,65 @@
     opacity: 0;
   }
 }
+
+/* Tooltips */
+.hon-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  color: var(--muted-foreground);
+  margin-left: 0.125rem;
+  vertical-align: middle;
+  transition: color 0.15s ease;
+}
+
+.hon-tooltip:hover {
+  color: var(--accent);
+}
+
+.hon-tooltip__icon {
+  flex-shrink: 0;
+  display: block;
+}
+
+.hon-tooltip__content {
+  position: absolute;
+  bottom: 150%;
+  left: -8px;
+  transform: translateY(4px);
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--foreground);
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 100;
+  border-radius: 4px;
+}
+
+/* Tooltip arrow */
+.hon-tooltip__content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 14px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: var(--border) transparent transparent transparent;
+}
+
+.hon-tooltip:hover .hon-tooltip__content {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}

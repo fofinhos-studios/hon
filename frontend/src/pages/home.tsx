@@ -3,6 +3,7 @@ import { useState } from "preact/hooks";
 import { BookList } from "../components/book-list";
 import { BookSearch } from "../components/book-search";
 import { ReadingPlanner } from "../components/reading-planner";
+import { Tooltip } from "../components/tooltip";
 import type { Book } from "../types";
 
 export function HomePage() {
@@ -44,6 +45,7 @@ export function HomePage() {
           <p class="hon-section-title">
             <Library size={14} aria-hidden="true" />
             <span>Your books</span>
+            <Tooltip content="Search for books, add them to your shelf, drag to reorder them, and track your current progress (pages or percentage)." />
           </p>
           <BookSearch onAdd={addBook} />
           <div class="hon-panel__list-wrap">
