@@ -285,12 +285,44 @@ export function calculateSchedule(
  * Returns 0 if there are no reading days in the range.
  */
 export function calculatePagesPerDay(
-  totalPages: number,
+  booksOrPages: Book[] | number,
   readingDays: DayOfWeek[],
   startDateISO: string,
   finishDateISO: string,
+  method: ReadingMethod = "interleaved",
 ): number {
   const available = countReadingDays(startDateISO, finishDateISO, readingDays);
   if (available === 0) return 0;
-  return Math.ceil(totalPages / available);
+
+  const totalPages =
+    typeof booksOrPages === "number"
+      ? booksOrPages
+      : booksOrPages.reduce(
+          (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
+          0,
+        );
+
+  if (method === "interleaved" || typeof booksOrPages === "number") {
+    return Math.ceil(totalPages / available);
+  }
+
+  // For sequential, we need to find the smallest pagesPerDay such that:
+  // sum( Math.ceil(book_remaining / pagesPerDay) ) <= available
+  let ppd = Math.ceil(totalPages / available);
+  if (ppd <= 0) return 0;
+
+  while (true) {
+    const daysNeeded = booksOrPages.reduce(
+      (sum, b) =>
+        sum + Math.ceil(Math.max(0, b.page_count - (b.pages_read || 0)) / ppd),
+      0,
+    );
+    if (daysNeeded <= available) {
+      return ppd;
+    }
+    ppd++;
+    if (ppd > totalPages) {
+      return totalPages;
+    }
+  }
 }

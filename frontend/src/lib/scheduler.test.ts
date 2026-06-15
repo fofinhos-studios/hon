@@ -224,4 +224,16 @@ describe("calculatePagesPerDay", () => {
     const ppd = calculatePagesPerDay(100, WEEKENDS, "2026-01-05", "2026-01-09");
     expect(ppd).toBe(0);
   });
+
+  test("sequential pages per day accounts for per-book rounding", () => {
+    const books = [makeBook("a", 31), makeBook("b", 31), makeBook("c", 31)];
+    const ppd = calculatePagesPerDay(
+      books,
+      EVERY_DAY,
+      "2026-01-05",
+      "2026-01-14",
+      "sequential",
+    );
+    expect(ppd).toBe(11);
+  });
 });

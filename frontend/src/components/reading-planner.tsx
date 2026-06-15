@@ -50,14 +50,15 @@ export function ReadingPlanner({ books }: Props) {
     } else {
       if (!finishDate) return;
       const ppd = calculatePagesPerDay(
-        totalPages,
+        books,
         readingDays,
         today,
         finishDate,
+        method,
       );
       if (ppd > 0) setPagesPerDay(ppd);
     }
-  }, [books, readingDays, pagesPerDay, finishDate, method, today, totalPages]);
+  }, [books, readingDays, pagesPerDay, finishDate, method, today]);
 
   const schedule: ScheduleResult | null =
     books.length > 0 && readingDays.length > 0 && pagesPerDay > 0
