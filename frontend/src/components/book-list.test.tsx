@@ -35,7 +35,7 @@ describe("BookList", () => {
       />,
     );
     expect(
-      empty.getByText("Search for a book above to add it to your list."),
+      empty.getByText("Search or enter a book above to add it to your list."),
     ).toBeTruthy();
     empty.unmount();
 

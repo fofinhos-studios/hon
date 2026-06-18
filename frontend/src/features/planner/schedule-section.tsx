@@ -23,7 +23,7 @@ export function ScheduleSection({
       <p class="hon-section-title">
         <Route size={14} aria-hidden="true" />
         <span>Schedule</span>
-        <Tooltip content="Your generated reading calendar. Shows start and target finish dates for each book based on your speed, progress, and reading days." />
+        <Tooltip content="Generated calendar from books, progress, pace, method, and reading days." />
       </p>
       {bookCount === 0 ? (
         <p class="reading-planner__empty">Add books to get started.</p>

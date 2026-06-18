@@ -15,7 +15,7 @@ export function ReadingMethodControl({ method, onChange }: Props) {
       <p class="hon-section-title">
         <Split size={14} aria-hidden="true" />
         <span>Reading method</span>
-        <Tooltip content="Choose 'Sequential' to read and finish books one-by-one in order, or 'Interleaved' to read all books concurrently with a shared daily page budget." />
+        <Tooltip content="Sequential finishes books in order. Interleaved shares daily pages across active books." />
       </p>
       <fieldset
         class="reading-planner__method-group"

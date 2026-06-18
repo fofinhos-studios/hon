@@ -19,7 +19,7 @@ export function ReadingDaysControl({
       <p class="hon-section-title">
         <CalendarDays size={14} aria-hidden="true" />
         <span>Reading days</span>
-        <Tooltip content="Select the days of the week you plan to read. The planner distributes your page target only on these selected days." />
+        <Tooltip content="Pick reading days. Page targets apply only to selected days." />
       </p>
       <DayPicker selected={readingDays} onChange={onChange} />
       {showWarning && (

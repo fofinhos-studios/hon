@@ -29,7 +29,7 @@ export function ReadingTargetControl({
           <label class="reading-planner__label" for="ppd-input">
             <Clock3 size={13} aria-hidden="true" />
             <span>Pages per day</span>
-            <Tooltip content="Set your daily page budget. The planner calculates the exact dates you will finish each book based on this speed." />
+            <Tooltip content="Set daily pages. Finish dates update from this pace." />
           </label>
           <div class="reading-planner__ppd">
             <input
@@ -62,7 +62,7 @@ export function ReadingTargetControl({
           <label class="reading-planner__label" for="finish-input">
             <CalendarDays size={13} aria-hidden="true" />
             <span>Finish by</span>
-            <Tooltip content="Choose your target deadline. The planner calculates how many pages per day are required to complete your books by this date." />
+            <Tooltip content="Set target date. Pages per day update to meet it." />
           </label>
           <input
             class="hon-input hon-mono reading-planner__date-input"

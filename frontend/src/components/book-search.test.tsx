@@ -24,6 +24,14 @@ beforeEach(() => {
   searchBooksMock.mockReset();
 });
 
+test("labels search and manual entry sections", () => {
+  const view = render(<BookSearch onAdd={() => {}} />);
+
+  expect(view.getByText("Add book via search")).toBeTruthy();
+  expect(view.getByText("or")).toBeTruthy();
+  expect(view.getByText("Add book manually")).toBeTruthy();
+});
+
 test("adds a selected result and resets search", async () => {
   const book: Book = {
     id: "dune",
@@ -49,4 +57,25 @@ test("adds a selected result and resets search", async () => {
   expect(onAdd).toHaveBeenCalledWith(book);
   expect(input.value).toBe("");
   expect(view.queryByText("Dune")).toBeNull();
+});
+
+test("adds a manual book and clears the form", () => {
+  const onAdd = mock((_book: Book) => {});
+  const view = render(<BookSearch onAdd={onAdd} />);
+  const titleInput = view.getByLabelText("Book name") as HTMLInputElement;
+  const pagesInput = view.getByLabelText("Number of pages") as HTMLInputElement;
+
+  fireEvent.input(titleInput, { target: { value: "House of Leaves" } });
+  fireEvent.input(pagesInput, { target: { value: "709" } });
+  fireEvent.click(view.getByRole("button", { name: "Add manual book" }));
+
+  expect(onAdd).toHaveBeenCalledWith({
+    id: expect.stringMatching(/^manual-/),
+    title: "House of Leaves",
+    author: "Manual entry",
+    page_count: 709,
+    cover_url: null,
+  });
+  expect(titleInput.value).toBe("");
+  expect(pagesInput.value).toBe("");
 });

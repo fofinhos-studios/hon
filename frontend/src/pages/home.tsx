@@ -26,7 +26,7 @@ export function HomePage() {
           <p class="hon-section-title">
             <Library size={14} aria-hidden="true" />
             <span>Your books</span>
-            <Tooltip content="Search for books, add them to your shelf, drag to reorder them, and track your current progress (pages or percentage)." />
+            <Tooltip content="Search or enter books, then drag to reorder and track progress by pages or percentage." />
           </p>
           <BookSearch onAdd={addBook} />
           <div class="hon-panel__list-wrap">
