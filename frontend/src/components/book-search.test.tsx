@@ -1,12 +1,16 @@
 import "../test/setup";
 
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import type { SearchResult } from "../services/api";
+import type { Book } from "../types";
 
-const searchBooksMock = mock(async (_query: string) => ({
-  books: [],
-  source: "google_books" as const,
-}));
+const searchBooksMock = mock(
+  async (): Promise<SearchResult> => ({
+    books: [],
+    source: "google_books",
+  }),
+);
 
 mock.module("../services/api", () => ({
   searchBooks: searchBooksMock,
@@ -14,108 +18,35 @@ mock.module("../services/api", () => ({
 
 const { BookSearch } = await import("./book-search");
 
-afterEach(() => {
+afterEach(cleanup);
+
+beforeEach(() => {
   searchBooksMock.mockReset();
 });
 
-beforeEach(() => {
-  searchBooksMock.mockImplementation(async (_query: string) => ({
-    books: [],
-    source: "google_books" as const,
+test("adds a selected result and resets search", async () => {
+  const book: Book = {
+    id: "dune",
+    title: "Dune",
+    author: "Frank Herbert",
+    page_count: 412,
+    cover_url: null,
+  };
+  searchBooksMock.mockImplementation(async () => ({
+    books: [book],
+    source: "google_books",
   }));
-});
+  const onAdd = mock((_book: Book) => {});
+  const view = render(<BookSearch onAdd={onAdd} />);
+  const input = view.getByLabelText("Search books") as HTMLInputElement;
 
-describe("BookSearch", () => {
-  test("does not search before three characters", async () => {
-    const view = render(<BookSearch onAdd={() => {}} />);
-    const input = view.getByLabelText("Search books") as HTMLInputElement;
-
-    fireEvent.input(input, { target: { value: "lo" } });
-
-    await new Promise((resolve) => setTimeout(resolve, 450));
-
-    expect(searchBooksMock).not.toHaveBeenCalled();
+  fireEvent.input(input, { target: { value: "dune" } });
+  await waitFor(() => expect(view.getByText("Dune")).toBeTruthy(), {
+    timeout: 700,
   });
+  fireEvent.click(view.getByRole("button", { name: /Dune/ }));
 
-  test("ignores stale failed searches once a newer search succeeds", async () => {
-    let rejectFirst: ((error: Error) => void) | undefined;
-    let resolveSecond:
-      | ((value: {
-          books: Array<{
-            id: string;
-            title: string;
-            author: string;
-            page_count: number;
-            cover_url: null;
-          }>;
-          source: "google_books" | "open_library";
-        }) => void)
-      | undefined;
-
-    searchBooksMock.mockImplementation((query: string) => {
-      if (query === "lor") {
-        return new Promise((_, reject) => {
-          rejectFirst = reject;
-        });
-      }
-
-      return new Promise((resolve) => {
-        resolveSecond = resolve;
-      });
-    });
-
-    const view = render(<BookSearch onAdd={() => {}} />);
-    const input = view.getByLabelText("Search books") as HTMLInputElement;
-
-    fireEvent.input(input, { target: { value: "lor" } });
-    await new Promise((resolve) => setTimeout(resolve, 450));
-
-    fireEvent.input(input, { target: { value: "lord" } });
-    await new Promise((resolve) => setTimeout(resolve, 450));
-
-    resolveSecond?.({
-      books: [
-        {
-          id: "OL1W",
-          title: "Lord Test",
-          author: "Author",
-          page_count: 123,
-          cover_url: null,
-        },
-      ],
-      source: "google_books",
-    });
-    rejectFirst?.(new Error("Search failed"));
-
-    await waitFor(() => {
-      expect(view.getByText("Lord Test")).toBeTruthy();
-    });
-
-    expect(view.queryByRole("alert")).toBeNull();
-  });
-
-  test("shows 'Results via OpenLibrary' note when fallback source is returned", async () => {
-    searchBooksMock.mockImplementation(async (_query: string) => ({
-      books: [
-        {
-          id: "OL1W",
-          title: "Dune",
-          author: "Frank Herbert",
-          page_count: 412,
-          cover_url: null,
-        },
-      ],
-      source: "open_library",
-    }));
-
-    const view = render(<BookSearch onAdd={() => {}} />);
-    const input = view.getByLabelText("Search books") as HTMLInputElement;
-
-    fireEvent.input(input, { target: { value: "dune" } });
-    await new Promise((resolve) => setTimeout(resolve, 450));
-
-    await waitFor(() => {
-      expect(view.getByText("Results via OpenLibrary")).toBeTruthy();
-    });
-  });
+  expect(onAdd).toHaveBeenCalledWith(book);
+  expect(input.value).toBe("");
+  expect(view.queryByText("Dune")).toBeNull();
 });

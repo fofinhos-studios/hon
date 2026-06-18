@@ -1,6 +1,7 @@
-import { BookOpen, GripVertical, X } from "lucide-preact";
-import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { BookCard } from "../features/books/book-card";
+import { BookListEmpty } from "../features/books/book-list-empty";
+import { BookListSummary } from "../features/books/book-list-summary";
+import { useBookReorder } from "../hooks/use-book-reorder";
 import type { Book } from "../types";
 
 interface Props {
@@ -10,390 +11,40 @@ interface Props {
   onUpdateProgress: (id: string, pagesRead: number | undefined) => void;
 }
 
-const DRAG_THRESHOLD_PX = 8;
-
-interface DragSlot {
-  top: number;
-  height: number;
-}
-
-interface DragState {
-  bookId: string;
-  pointerId: number;
-  originIndex: number;
-  targetIndex: number;
-  startY: number;
-  currentY: number;
-  activated: boolean;
-  slots: DragSlot[];
-  itemGap: number;
-}
-
-function reorderBooksByIndex(
-  books: Book[],
-  fromIndex: number,
-  toIndex: number,
-): Book[] {
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-    return books;
-  }
-
-  const nextBooks = [...books];
-  const [draggedBook] = nextBooks.splice(fromIndex, 1);
-  nextBooks.splice(toIndex, 0, draggedBook);
-  return nextBooks;
-}
-
-export interface BookCardProps {
-  book: Book;
-  index: number;
-  isDragging: boolean;
-  isDropTarget: boolean;
-  style?: JSX.CSSProperties;
-  onPointerDown: (event: PointerEvent) => void;
-  onRemove: () => void;
-  onUpdateProgress: (pagesRead: number | undefined) => void;
-  itemRef: (element: HTMLLIElement | null) => void;
-}
-
-export function BookCard({
-  book,
-  index,
-  isDragging,
-  isDropTarget,
-  style,
-  onPointerDown,
-  onRemove,
-  onUpdateProgress,
-  itemRef,
-}: BookCardProps) {
-  const handlePagesReadChange = (valueStr: string) => {
-    if (valueStr === "") {
-      onUpdateProgress(undefined);
-      return;
-    }
-
-    const value = Number.parseInt(valueStr, 10);
-    if (Number.isNaN(value)) return;
-
-    const clamped = Math.max(0, Math.min(book.page_count, value));
-    onUpdateProgress(clamped);
-  };
-
-  const handlePercentReadChange = (valueStr: string) => {
-    if (valueStr === "") {
-      onUpdateProgress(undefined);
-      return;
-    }
-
-    const value = Number.parseInt(valueStr, 10);
-    if (Number.isNaN(value)) return;
-
-    const clampedPercent = Math.max(0, Math.min(100, value));
-    const pages = Math.round((clampedPercent / 100) * book.page_count);
-    onUpdateProgress(pages);
-  };
-
-  return (
-    <li
-      ref={itemRef}
-      data-book-id={book.id}
-      class={`book-list__item${isDragging ? " book-list__item--dragging" : ""}${isDropTarget ? " book-list__item--drop-target" : ""}`}
-      style={style}
-      onPointerDown={onPointerDown}
-    >
-      <span class="book-list__drag-handle" aria-hidden="true">
-        <GripVertical size={16} aria-hidden="true" />
-      </span>
-      {book.cover_url && (
-        <img
-          class="book-list__cover"
-          src={book.cover_url}
-          alt=""
-          draggable="false"
-          width={28}
-          height={42}
-        />
-      )}
-      <div class="book-list__info">
-        <span class="book-list__title">{book.title}</span>
-        <span class="book-list__meta hon-mono">
-          {book.author} · {book.page_count}pp
-        </span>
-        <div
-          class="book-list__progress-row"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <span class="book-list__progress-label">Read:</span>
-          <input
-            type="number"
-            min="0"
-            max={book.page_count}
-            placeholder="0"
-            value={book.pages_read ?? ""}
-            onInput={(e) =>
-              handlePagesReadChange((e.target as HTMLInputElement).value)
-            }
-            class="hon-input book-list__progress-input hon-mono"
-            aria-label={`Pages read for ${book.title}`}
-          />
-          <span class="book-list__progress-slash">/</span>
-          <span class="book-list__progress-total hon-mono">
-            {book.page_count} pp
-          </span>
-          <span class="book-list__progress-or">or</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            placeholder="0"
-            value={
-              book.pages_read !== undefined
-                ? Math.round((book.pages_read / book.page_count) * 100)
-                : ""
-            }
-            onInput={(e) =>
-              handlePercentReadChange((e.target as HTMLInputElement).value)
-            }
-            class="hon-input book-list__progress-input hon-mono"
-            aria-label={`Percentage read for ${book.title}`}
-          />
-          <span class="book-list__progress-percent hon-mono">%</span>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="book-list__remove"
-        aria-label={`Remove ${book.title}`}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={onRemove}
-      >
-        <X size={14} aria-hidden="true" />
-      </button>
-    </li>
-  );
-}
-
 export function BookList({
   books,
   onRemove,
   onReorder,
   onUpdateProgress,
 }: Props) {
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const { dragState, getItemStyle, handlePointerDown, setItemRef } =
+    useBookReorder(books, onReorder);
 
-  const handlePointerDown = (bookId: string, event: PointerEvent) => {
-    if ("button" in event && event.button !== 0) return;
-    if ((event.target as HTMLElement).closest(".book-list__remove")) return;
-    if ((event.target as HTMLElement).closest(".book-list__progress-input"))
-      return;
-
-    const originIndex = books.findIndex((book) => book.id === bookId);
-    if (originIndex < 0) return;
-
-    const slots = books
-      .map((book) => itemRefs.current[book.id]?.getBoundingClientRect())
-      .filter((slot): slot is DOMRect => slot !== null && slot !== undefined)
-      .map((slot) => ({ top: slot.top, height: slot.height }));
-
-    if (slots.length !== books.length) return;
-
-    const itemGap =
-      slots.length > 1
-        ? Math.max(0, slots[1].top - slots[0].top - slots[0].height)
-        : 10;
-
-    cleanupRef.current?.();
-
-    let currentState: DragState = {
-      bookId,
-      pointerId: event.pointerId,
-      originIndex,
-      targetIndex: originIndex,
-      startY: event.clientY,
-      currentY: event.clientY,
-      activated: false,
-      slots,
-      itemGap,
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerEnd);
-      window.removeEventListener("pointercancel", handlePointerEnd);
-      cleanupRef.current = null;
-    };
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== currentState.pointerId) return;
-
-      const deltaY = moveEvent.clientY - currentState.startY;
-      const activated =
-        currentState.activated || Math.abs(deltaY) >= DRAG_THRESHOLD_PX;
-
-      let targetIndex = currentState.originIndex;
-      if (activated) {
-        const originSlot = currentState.slots[currentState.originIndex];
-        const currentCenter = originSlot.top + originSlot.height / 2 + deltaY;
-
-        if (deltaY > 0) {
-          for (
-            let index = currentState.originIndex + 1;
-            index < currentState.slots.length;
-            index += 1
-          ) {
-            const slotCenter =
-              currentState.slots[index].top +
-              currentState.slots[index].height / 2;
-            if (currentCenter > slotCenter) {
-              targetIndex = index;
-            }
-          }
-        } else if (deltaY < 0) {
-          for (
-            let index = currentState.originIndex - 1;
-            index >= 0;
-            index -= 1
-          ) {
-            const slotCenter =
-              currentState.slots[index].top +
-              currentState.slots[index].height / 2;
-            if (currentCenter < slotCenter) {
-              targetIndex = index;
-            }
-          }
-        }
-      }
-
-      currentState = {
-        ...currentState,
-        activated,
-        currentY: moveEvent.clientY,
-        targetIndex,
-      };
-      setDragState(currentState);
-    };
-
-    const handlePointerEnd = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== currentState.pointerId) return;
-
-      if (
-        currentState.activated &&
-        currentState.targetIndex !== currentState.originIndex
-      ) {
-        onReorder(
-          reorderBooksByIndex(
-            books,
-            currentState.originIndex,
-            currentState.targetIndex,
-          ),
-        );
-      }
-
-      cleanup();
-      setDragState(null);
-    };
-
-    cleanupRef.current = cleanup;
-    setDragState(currentState);
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerEnd);
-    window.addEventListener("pointercancel", handlePointerEnd);
-  };
-
-  const getItemStyle = (index: number, bookId: string) => {
-    if (!dragState) return undefined;
-
-    const deltaY = dragState.currentY - dragState.startY;
-    const slotDistance =
-      dragState.slots[dragState.originIndex]?.height + dragState.itemGap;
-
-    if (dragState.bookId === bookId) {
-      if (!dragState.activated) return undefined;
-      const tilt = Math.max(-2, Math.min(2, deltaY / 18));
-      return {
-        transform: `translateY(${deltaY}px) scale(1.018) rotate(${tilt}deg)`,
-        zIndex: "3",
-        transition: "none",
-      };
-    }
-
-    if (!dragState.activated) return undefined;
-
-    let translateY = 0;
-    if (
-      dragState.targetIndex > dragState.originIndex &&
-      index > dragState.originIndex &&
-      index <= dragState.targetIndex
-    ) {
-      translateY = -slotDistance;
-    } else if (
-      dragState.targetIndex < dragState.originIndex &&
-      index >= dragState.targetIndex &&
-      index < dragState.originIndex
-    ) {
-      translateY = slotDistance;
-    }
-
-    if (translateY === 0) return undefined;
-    return { transform: `translateY(${translateY}px)` };
-  };
-
-  if (books.length === 0) {
-    return (
-      <div class="book-list-empty">
-        <BookOpen class="book-list-empty__icon" size={32} aria-hidden="true" />
-        <p class="book-list-empty__text">
-          Search for a book above to add it to your list.
-        </p>
-      </div>
-    );
-  }
-
-  const totalPages = books.reduce((sum, b) => sum + b.page_count, 0);
-  const totalRemainingPages = books.reduce(
-    (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
-    0,
-  );
+  if (books.length === 0) return <BookListEmpty />;
 
   return (
     <div class="book-list">
       <ul class="book-list__items">
-        {books.map((book, index) => {
-          const isDragging =
-            dragState?.bookId === book.id && dragState.activated;
-          const isDropTarget =
-            dragState?.targetIndex === index &&
-            dragState?.targetIndex !== dragState?.originIndex;
-          const style = getItemStyle(index, book.id);
-
-          return (
-            <BookCard
-              key={book.id}
-              book={book}
-              index={index}
-              isDragging={isDragging}
-              isDropTarget={isDropTarget}
-              style={style}
-              onPointerDown={(event) => handlePointerDown(book.id, event)}
-              onRemove={() => onRemove(book.id)}
-              onUpdateProgress={(pagesRead) =>
-                onUpdateProgress(book.id, pagesRead)
-              }
-              itemRef={(element) => {
-                itemRefs.current[book.id] = element;
-              }}
-            />
-          );
-        })}
+        {books.map((book, index) => (
+          <BookCard
+            key={book.id}
+            book={book}
+            isDragging={dragState?.bookId === book.id && dragState.activated}
+            isDropTarget={
+              dragState?.targetIndex === index &&
+              dragState.targetIndex !== dragState.originIndex
+            }
+            style={getItemStyle(index, book.id)}
+            onPointerDown={(event) => handlePointerDown(book.id, event)}
+            onRemove={() => onRemove(book.id)}
+            onUpdateProgress={(pagesRead) =>
+              onUpdateProgress(book.id, pagesRead)
+            }
+            itemRef={(element) => setItemRef(book.id, element)}
+          />
+        ))}
       </ul>
-      <p class="book-list__total hon-mono">
-        {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
-        {totalRemainingPages.toLocaleString()} / {totalPages.toLocaleString()}{" "}
-        pages left
-      </p>
+      <BookListSummary books={books} />
     </div>
   );
 }

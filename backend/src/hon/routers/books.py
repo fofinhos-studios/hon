@@ -1,142 +1,42 @@
-import os
+import asyncio
+import logging
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
-from hon.models.book import BookResult, SearchResult
+from hon.models.book import SearchResult
+from hon.services.google_books import search as search_google_books
+from hon.services.open_library import search as search_open_library
 
 router = APIRouter(prefix="/books", tags=["books"])
+logger = logging.getLogger(__name__)
+MAX_QUERY_LENGTH = 200
+SEARCH_DEADLINE_SECONDS = 20.0
 
-GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
-OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
-OPENLIBRARY_COVER_URL = "https://covers.openlibrary.org/b/id/{cover_id}-M.jpg"
-SEARCH_LIMIT = 10
-EARLY_RETURN_RESULT_COUNT = 5
-SEARCH_TIMEOUT_SECONDS = 15.0
-
-
-# ── Google Books ────────────────────────────────────────────────────────────
-
-def _normalize_google_cover_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    return url.replace("http://", "https://", 1)
-
-
-def _google_books_queries(q: str) -> list[str]:
-    return [f"intitle:{q}", f"inauthor:{q}", q]
-
-
-def _normalize_gb(item: dict) -> BookResult | None:
-    info = item.get("volumeInfo", {})
-    page_count = info.get("pageCount")
-    if not page_count or page_count < 1:
-        return None
-    authors = info.get("authors") or []
-    cover_url: str | None = None
-    image_links = info.get("imageLinks") or {}
-    if "thumbnail" in image_links:
-        cover_url = _normalize_google_cover_url(image_links["thumbnail"])
-    return BookResult(
-        id=item["id"],
-        title=info.get("title", "Unknown"),
-        author=authors[0] if authors else "Unknown",
-        page_count=int(page_count),
-        cover_url=cover_url,
-    )
-
-
-async def _fetch_google_books(client: httpx.AsyncClient, q: str, api_key: str) -> list[BookResult]:
-    params = {
-        "q": q,
-        "maxResults": SEARCH_LIMIT,
-        "printType": "books",
-        "key": api_key,
-    }
-    response = await client.get(GOOGLE_BOOKS_URL, params=params)
-    response.raise_for_status()
-    data = response.json()
-    results = []
-    for item in data.get("items") or []:
-        book = _normalize_gb(item)
-        if book is not None:
-            results.append(book)
-    return results
-
-
-async def _search_google_books(q: str) -> list[BookResult]:
-    api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
-    if not api_key:
-        return []
-
-    results: list[BookResult] = []
-    seen_ids: set[str] = set()
-    async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
-        for index, query in enumerate(_google_books_queries(q)):
-            books = await _fetch_google_books(client, query, api_key)
-            for book in books:
-                if book.id in seen_ids:
-                    continue
-                seen_ids.add(book.id)
-                results.append(book)
-                if len(results) == SEARCH_LIMIT:
-                    return results
-            if index == 0 and len(results) >= EARLY_RETURN_RESULT_COUNT:
-                return results
-    return results
-
-
-# ── OpenLibrary ─────────────────────────────────────────────────────────────
-
-def _normalize_ol(doc: dict) -> BookResult | None:
-    page_count = doc.get("number_of_pages_median")
-    if not page_count or page_count < 1:
-        return None
-    cover_id = doc.get("cover_i")
-    cover_url = OPENLIBRARY_COVER_URL.format(cover_id=cover_id) if cover_id else None
-    authors = doc.get("author_name") or []
-    return BookResult(
-        id=doc["key"].removeprefix("/works/"),
-        title=doc["title"],
-        author=authors[0] if authors else "Unknown",
-        page_count=int(page_count),
-        cover_url=cover_url,
-    )
-
-
-async def _search_open_library(q: str) -> list[BookResult]:
-    params = {
-        "q": q,
-        "fields": "key,title,author_name,number_of_pages_median,cover_i",
-        "limit": SEARCH_LIMIT,
-    }
-    async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
-        response = await client.get(OPENLIBRARY_SEARCH_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
-    results = []
-    for doc in data.get("docs", []):
-        book = _normalize_ol(doc)
-        if book is not None:
-            results.append(book)
-    return results
-
-
-# ── Route ───────────────────────────────────────────────────────────────────
 
 @router.get("/search", response_model=SearchResult)
-async def search_books(q: str = Query(..., min_length=3)) -> SearchResult:
-    # 1. Try Google Books
+async def search_books(q: str = Query(..., min_length=3, max_length=MAX_QUERY_LENGTH)) -> SearchResult:
+    query = q.strip()
+    if len(query) < 3:
+        raise HTTPException(status_code=422, detail="Search query must contain at least 3 characters")
+
     try:
-        books = await _search_google_books(q)
+        async with asyncio.timeout(SEARCH_DEADLINE_SECONDS):
+            return await _search_catalogs(query)
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Book search timed out") from exc
+
+
+async def _search_catalogs(query: str) -> SearchResult:
+    try:
+        books = await search_google_books(query)
         if books:
             return SearchResult(books=books, source="google_books")
     except httpx.HTTPError:
-        pass  # fall through to OpenLibrary
+        logger.warning("Google Books search failed; falling back", exc_info=True)
 
-    # 2. Fallback: OpenLibrary
     try:
-        books = await _search_open_library(q)
+        books = await search_open_library(query)
         return SearchResult(books=books, source="open_library")
     except httpx.ReadTimeout as exc:
         raise HTTPException(status_code=504, detail="Book search timed out") from exc

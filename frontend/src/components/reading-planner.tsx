@@ -1,224 +1,46 @@
-import { CalendarDays, Clock3, Route, Split } from "lucide-preact";
-import { useEffect, useRef, useState } from "preact/hooks";
-import {
-  calculatePagesPerDay,
-  calculateSchedule,
-  todayISO,
-} from "../lib/scheduler";
-import type { Book, DayOfWeek, ReadingMethod, ScheduleResult } from "../types";
-import { DayPicker } from "./day-picker";
-import { ScheduleView } from "./schedule-view";
-import { Tooltip } from "./tooltip";
-
-const DEFAULT_PAGES_PER_DAY = 30;
-const MIN_PAGES = 1;
-const MAX_PAGES = 200;
+import { ReadingDaysControl } from "../features/planner/reading-days-control";
+import { ReadingMethodControl } from "../features/planner/reading-method-control";
+import { ReadingTargetControl } from "../features/planner/reading-target-control";
+import { ScheduleSection } from "../features/planner/schedule-section";
+import { useReadingPlanner } from "../features/planner/use-reading-planner";
+import type { Book } from "../types";
 
 interface Props {
   books: Book[];
 }
 
 export function ReadingPlanner({ books }: Props) {
-  const [readingDays, setReadingDays] = useState<DayOfWeek[]>([0, 1, 2, 3, 4]);
-  const [pagesPerDay, setPagesPerDay] = useState(DEFAULT_PAGES_PER_DAY);
-  const [finishDate, setFinishDate] = useState("");
-  const [method, setMethod] = useState<ReadingMethod>("sequential");
-  // Ref (not state) so changes to direction don't themselves trigger the effect.
-  const lastChangedRef = useRef<"pages" | "date">("pages");
-
-  const totalPages = books.reduce(
-    (sum, b) => sum + Math.max(0, b.page_count - (b.pages_read || 0)),
-    0,
-  );
-  const today = todayISO();
-
-  useEffect(() => {
-    if (books.length === 0 || readingDays.length === 0) {
-      setFinishDate("");
-      return;
-    }
-
-    if (lastChangedRef.current === "pages") {
-      const result = calculateSchedule(
-        books,
-        readingDays,
-        pagesPerDay,
-        method,
-        today,
-      );
-      setFinishDate(result.finish_date);
-    } else {
-      if (!finishDate) return;
-      const ppd = calculatePagesPerDay(
-        books,
-        readingDays,
-        today,
-        finishDate,
-        method,
-      );
-      if (ppd > 0) setPagesPerDay(ppd);
-    }
-  }, [books, readingDays, pagesPerDay, finishDate, method, today]);
-
-  const schedule: ScheduleResult | null =
-    books.length > 0 && readingDays.length > 0 && pagesPerDay > 0
-      ? calculateSchedule(books, readingDays, pagesPerDay, method, today)
-      : null;
-
-  const handlePagesChange = (value: number) => {
-    lastChangedRef.current = "pages";
-    setPagesPerDay(value);
-  };
-
-  const handleDateChange = (value: string) => {
-    lastChangedRef.current = "date";
-    setFinishDate(value);
-  };
-
-  const noDaysWarning = readingDays.length === 0;
-  const dateTooSoonWarning =
-    lastChangedRef.current === "date" && finishDate && finishDate < today;
-
+  const planner = useReadingPlanner(books);
   return (
     <div class="reading-planner">
-      <section class="reading-planner__section">
-        <p class="hon-section-title">
-          <CalendarDays size={14} aria-hidden="true" />
-          <span>Reading days</span>
-          <Tooltip content="Select the days of the week you plan to read. The planner distributes your page target only on these selected days." />
-        </p>
-        <DayPicker selected={readingDays} onChange={setReadingDays} />
-        {noDaysWarning && (
-          <p class="reading-planner__warn" role="alert">
-            Select at least one reading day.
-          </p>
-        )}
-      </section>
-
+      <ReadingDaysControl
+        readingDays={planner.readingDays}
+        onChange={planner.setReadingDays}
+        showWarning={planner.noDaysWarning}
+      />
       <hr class="hon-divider" />
-
-      <section class="reading-planner__section">
-        <div class="reading-planner__modes">
-          <div class="reading-planner__mode">
-            <label class="reading-planner__label" for="ppd-input">
-              <Clock3 size={13} aria-hidden="true" />
-              <span>Pages per day</span>
-              <Tooltip content="Set your daily page budget. The planner calculates the exact dates you will finish each book based on this speed." />
-            </label>
-            <div class="reading-planner__ppd">
-              <input
-                class="hon-input reading-planner__ppd-input hon-mono"
-                id="ppd-input"
-                type="number"
-                min={MIN_PAGES}
-                max={MAX_PAGES}
-                value={pagesPerDay}
-                onInput={(e) =>
-                  handlePagesChange(
-                    Math.max(
-                      MIN_PAGES,
-                      Number((e.target as HTMLInputElement).value),
-                    ),
-                  )
-                }
-                disabled={noDaysWarning || books.length === 0}
-              />
-              <input
-                class="reading-planner__slider"
-                type="range"
-                min={MIN_PAGES}
-                max={MAX_PAGES}
-                value={pagesPerDay}
-                onInput={(e) =>
-                  handlePagesChange(
-                    Number((e.target as HTMLInputElement).value),
-                  )
-                }
-                aria-label="Pages per day slider"
-                disabled={noDaysWarning || books.length === 0}
-              />
-            </div>
-          </div>
-
-          <div class="reading-planner__mode">
-            <label class="reading-planner__label" for="finish-input">
-              <CalendarDays size={13} aria-hidden="true" />
-              <span>Finish by</span>
-              <Tooltip content="Choose your target deadline. The planner calculates how many pages per day are required to complete your books by this date." />
-            </label>
-            <input
-              class="hon-input hon-mono reading-planner__date-input"
-              id="finish-input"
-              type="date"
-              value={finishDate}
-              min={today}
-              onInput={(e) =>
-                handleDateChange((e.target as HTMLInputElement).value)
-              }
-              disabled={noDaysWarning || books.length === 0}
-            />
-            {dateTooSoonWarning && (
-              <p class="reading-planner__warn" role="alert">
-                Date is in the past.
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
+      <ReadingTargetControl
+        pagesPerDay={planner.pagesPerDay}
+        finishDate={planner.finishDate}
+        today={planner.today}
+        disabled={planner.noDaysWarning || books.length === 0}
+        dateTooSoon={planner.dateTooSoonWarning}
+        onPagesChange={planner.setPagesPerDay}
+        onDateChange={planner.setFinishDate}
+      />
       <hr class="hon-divider" />
-
-      <section class="reading-planner__section">
-        <p class="hon-section-title">
-          <Split size={14} aria-hidden="true" />
-          <span>Reading method</span>
-          <Tooltip content="Choose 'Sequential' to read and finish books one-by-one in order, or 'Interleaved' to read all books concurrently with a shared daily page budget." />
-        </p>
-        <fieldset
-          class="reading-planner__method-group"
-          aria-label="Reading method"
-        >
-          {(["sequential", "interleaved"] as ReadingMethod[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              class={`hon-btn reading-planner__method-btn${method === m ? " reading-planner__method-btn--active" : ""}`}
-              aria-pressed={method === m ? "true" : "false"}
-              onClick={() => setMethod(m)}
-            >
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
-          ))}
-        </fieldset>
-        <p class="reading-planner__method-help">
-          {method === "sequential"
-            ? "Finish one book before starting the next. Your full daily page budget applies to the current book."
-            : "Split your daily page budget across all active books. Larger books get a bigger share so everything finishes around the same time."}
-        </p>
-      </section>
-
+      <ReadingMethodControl
+        method={planner.method}
+        onChange={planner.setMethod}
+      />
       <hr class="hon-divider" />
-
-      <section class="reading-planner__section">
-        <p class="hon-section-title">
-          <Route size={14} aria-hidden="true" />
-          <span>Schedule</span>
-          <Tooltip content="Your generated reading calendar. Shows start and target finish dates for each book based on your speed, progress, and reading days." />
-        </p>
-        {books.length === 0 ? (
-          <p class="reading-planner__empty">Add books to get started.</p>
-        ) : noDaysWarning ? (
-          <p class="reading-planner__empty">
-            Select reading days to see your schedule.
-          </p>
-        ) : schedule ? (
-          <ScheduleView
-            result={schedule}
-            pagesPerDay={pagesPerDay}
-            method={method}
-          />
-        ) : null}
-      </section>
+      <ScheduleSection
+        bookCount={books.length}
+        noDaysWarning={planner.noDaysWarning}
+        pagesPerDay={planner.pagesPerDay}
+        method={planner.method}
+        schedule={planner.schedule}
+      />
     </div>
   );
 }

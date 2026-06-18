@@ -1,0 +1,26 @@
+/* Day picker */
+.day-picker {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.day-picker__btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.day-picker__btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}

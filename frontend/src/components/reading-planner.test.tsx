@@ -1,0 +1,104 @@
+import "../test/setup";
+
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { addReadingDays, todayISO } from "../domain/schedule";
+import type { Book, DayOfWeek } from "../types";
+import { ReadingPlanner } from "./reading-planner";
+
+const books: Book[] = [
+  {
+    id: "a",
+    title: "Test Book",
+    author: "Test Author",
+    page_count: 100,
+    cover_url: null,
+  },
+];
+
+afterEach(cleanup);
+
+describe("ReadingPlanner", () => {
+  test("normalizes manually entered pages per day to a positive integer", () => {
+    const view = render(<ReadingPlanner books={books} />);
+    const input = view.container.querySelector<HTMLInputElement>("#ppd-input");
+    if (!input) throw new Error("Expected pages-per-day input");
+
+    fireEvent.input(input, { target: { value: "1.5" } });
+
+    expect(input.value).toBe("2");
+  });
+
+  test("supports deadlines requiring more than 200 pages per day", () => {
+    const view = render(
+      <ReadingPlanner books={[{ ...books[0], page_count: 1_000 }]} />,
+    );
+    const finishInput =
+      view.container.querySelector<HTMLInputElement>("#finish-input");
+    const pagesInput =
+      view.container.querySelector<HTMLInputElement>("#ppd-input");
+    const slider = view.getByLabelText(
+      "Pages per day slider",
+    ) as HTMLInputElement;
+    if (!finishInput || !pagesInput) throw new Error("Expected planner inputs");
+
+    fireEvent.input(finishInput, { target: { value: todayISO() } });
+
+    expect(pagesInput.value).toBe("1000");
+    expect(slider.max).toBe("1000");
+  });
+
+  test("changing pages updates finish date after deadline mode", () => {
+    const view = render(<ReadingPlanner books={books} />);
+    const finishInput =
+      view.container.querySelector<HTMLInputElement>("#finish-input");
+    const pagesInput =
+      view.container.querySelector<HTMLInputElement>("#ppd-input");
+    if (!finishInput || !pagesInput) throw new Error("Expected planner inputs");
+
+    fireEvent.input(finishInput, { target: { value: todayISO() } });
+    fireEvent.input(pagesInput, { target: { value: "10" } });
+
+    expect(pagesInput.value).toBe("10");
+    expect(finishInput.value).not.toBe(todayISO());
+  });
+
+  test("changing reading method recalculates deadline-driven pages", () => {
+    const plannerBooks = [31, 31, 31].map((page_count, index) => ({
+      ...books[0],
+      id: String(index),
+      page_count,
+    }));
+    const weekdays: DayOfWeek[] = [0, 1, 2, 3, 4];
+    const deadline = addReadingDays(todayISO(), weekdays, 10);
+    const view = render(<ReadingPlanner books={plannerBooks} />);
+    const finishInput =
+      view.container.querySelector<HTMLInputElement>("#finish-input");
+    const pagesInput =
+      view.container.querySelector<HTMLInputElement>("#ppd-input");
+    if (!finishInput || !pagesInput) throw new Error("Expected planner inputs");
+
+    fireEvent.input(finishInput, { target: { value: deadline } });
+    expect(pagesInput.value).toBe("11");
+    fireEvent.click(view.getByText("Interleaved"));
+    expect(pagesInput.value).toBe("10");
+  });
+
+  test("changing books recalculates deadline-driven pages", () => {
+    const weekdays: DayOfWeek[] = [0, 1, 2, 3, 4];
+    const deadline = addReadingDays(todayISO(), weekdays, 10);
+    const view = render(<ReadingPlanner books={books} />);
+    const finishInput =
+      view.container.querySelector<HTMLInputElement>("#finish-input");
+    const pagesInput =
+      view.container.querySelector<HTMLInputElement>("#ppd-input");
+    if (!finishInput || !pagesInput) throw new Error("Expected planner inputs");
+
+    fireEvent.input(finishInput, { target: { value: deadline } });
+    expect(pagesInput.value).toBe("10");
+    view.rerender(
+      <ReadingPlanner books={[{ ...books[0], page_count: 200 }]} />,
+    );
+    expect(pagesInput.value).toBe("20");
+  });
+});

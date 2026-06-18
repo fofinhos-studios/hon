@@ -1,0 +1,1 @@
+"""External book catalog adapters."""

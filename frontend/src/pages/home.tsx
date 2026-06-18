@@ -1,32 +1,13 @@
 import { Library } from "lucide-preact";
-import { useState } from "preact/hooks";
 import { BookList } from "../components/book-list";
 import { BookSearch } from "../components/book-search";
 import { ReadingPlanner } from "../components/reading-planner";
 import { Tooltip } from "../components/tooltip";
-import type { Book } from "../types";
+import { usePersistentBooks } from "../features/books/use-persistent-books";
 
 export function HomePage() {
-  const [books, setBooks] = useState<Book[]>([]);
-
-  const addBook = (book: Book) => {
-    if (books.some((b) => b.id === book.id)) return;
-    setBooks((prev) => [...prev, book]);
-  };
-
-  const removeBook = (id: string) => {
-    setBooks((prev) => prev.filter((b) => b.id !== id));
-  };
-
-  const reorderBooks = (nextBooks: Book[]) => {
-    setBooks(nextBooks);
-  };
-
-  const updateProgress = (id: string, pagesRead: number | undefined) => {
-    setBooks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, pages_read: pagesRead } : b)),
-    );
-  };
+  const { books, addBook, removeBook, reorderBooks, updateProgress } =
+    usePersistentBooks();
 
   return (
     <div class="hon-shell">

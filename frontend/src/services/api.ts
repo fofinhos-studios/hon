@@ -20,9 +20,14 @@ export interface SearchResult {
   source: "google_books" | "open_library";
 }
 
-export async function searchBooks(query: string): Promise<SearchResult> {
+export async function searchBooks(
+  query: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<SearchResult> {
   const params = new URLSearchParams({ q: query });
-  const response = await fetch(`${API_BASE}/books/search?${params}`);
+  const response = await fetch(`${API_BASE}/books/search?${params}`, {
+    signal: options.signal,
+  });
   if (!response.ok) throw await parseError(response, "Search failed");
   return response.json() as Promise<SearchResult>;
 }

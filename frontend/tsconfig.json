@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["bun-types"],
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
     "strict": true,
@@ -12,12 +13,13 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "paths": {
       "react": ["./node_modules/preact/compat/"],
       "react-dom": ["./node_modules/preact/compat/"]
     }
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  "include": ["src"]
 }
