@@ -30,6 +30,44 @@
   border: 1px solid var(--border);
   border-radius: 0.9rem;
   background: var(--surface);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s
+    ease, box-shadow 0.24s ease, background 0.18s ease;
+  will-change: transform;
+}
+
+.schedule-view__item--dragging {
+  z-index: 3;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 97%, var(--accent));
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.22);
+  cursor: grabbing;
+}
+
+.schedule-view__item--drop-target {
+  border-color: var(--accent);
+}
+
+.schedule-view__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0.1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.schedule-view__item:hover .schedule-view__drag-handle,
+.schedule-view__item--dragging .schedule-view__drag-handle {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
 }
 
 .schedule-view__cover {

@@ -7,9 +7,10 @@ import type { Book } from "../types";
 
 interface Props {
   books: Book[];
+  onReorder: (books: Book[]) => void;
 }
 
-export function ReadingPlanner({ books }: Props) {
+export function ReadingPlanner({ books, onReorder }: Props) {
   const planner = useReadingPlanner(books);
   return (
     <div class="reading-planner">
@@ -35,11 +36,13 @@ export function ReadingPlanner({ books }: Props) {
       />
       <hr class="hon-divider" />
       <ScheduleSection
+        books={books}
         bookCount={books.length}
         noDaysWarning={planner.noDaysWarning}
         pagesPerDay={planner.pagesPerDay}
         method={planner.method}
         schedule={planner.schedule}
+        onReorder={onReorder}
       />
     </div>
   );

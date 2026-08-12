@@ -40,7 +40,7 @@ export function HomePage() {
         </aside>
 
         <main class="hon-panel hon-panel--right">
-          <ReadingPlanner books={books} />
+          <ReadingPlanner books={books} onReorder={reorderBooks} />
         </main>
       </div>
     </div>

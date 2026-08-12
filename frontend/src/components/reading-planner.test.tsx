@@ -20,7 +20,7 @@ afterEach(cleanup);
 
 describe("ReadingPlanner", () => {
   test("normalizes manually entered pages per day to a positive integer", () => {
-    const view = render(<ReadingPlanner books={books} />);
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
     const input = view.container.querySelector<HTMLInputElement>("#ppd-input");
     if (!input) throw new Error("Expected pages-per-day input");
 
@@ -31,7 +31,10 @@ describe("ReadingPlanner", () => {
 
   test("supports deadlines requiring more than 200 pages per day", () => {
     const view = render(
-      <ReadingPlanner books={[{ ...books[0], page_count: 1_000 }]} />,
+      <ReadingPlanner
+        books={[{ ...books[0], page_count: 1_000 }]}
+        onReorder={() => {}}
+      />,
     );
     const finishInput =
       view.container.querySelector<HTMLInputElement>("#finish-input");
@@ -49,7 +52,7 @@ describe("ReadingPlanner", () => {
   });
 
   test("changing pages updates finish date after deadline mode", () => {
-    const view = render(<ReadingPlanner books={books} />);
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
     const finishInput =
       view.container.querySelector<HTMLInputElement>("#finish-input");
     const pagesInput =
@@ -71,7 +74,9 @@ describe("ReadingPlanner", () => {
     }));
     const weekdays: DayOfWeek[] = [0, 1, 2, 3, 4];
     const deadline = addReadingDays(todayISO(), weekdays, 10);
-    const view = render(<ReadingPlanner books={plannerBooks} />);
+    const view = render(
+      <ReadingPlanner books={plannerBooks} onReorder={() => {}} />,
+    );
     const finishInput =
       view.container.querySelector<HTMLInputElement>("#finish-input");
     const pagesInput =
@@ -87,7 +92,7 @@ describe("ReadingPlanner", () => {
   test("changing books recalculates deadline-driven pages", () => {
     const weekdays: DayOfWeek[] = [0, 1, 2, 3, 4];
     const deadline = addReadingDays(todayISO(), weekdays, 10);
-    const view = render(<ReadingPlanner books={books} />);
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
     const finishInput =
       view.container.querySelector<HTMLInputElement>("#finish-input");
     const pagesInput =
@@ -97,7 +102,10 @@ describe("ReadingPlanner", () => {
     fireEvent.input(finishInput, { target: { value: deadline } });
     expect(pagesInput.value).toBe("10");
     view.rerender(
-      <ReadingPlanner books={[{ ...books[0], page_count: 200 }]} />,
+      <ReadingPlanner
+        books={[{ ...books[0], page_count: 200 }]}
+        onReorder={() => {}}
+      />,
     );
     expect(pagesInput.value).toBe("20");
   });

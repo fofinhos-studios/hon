@@ -1,22 +1,26 @@
 import { Route } from "lucide-preact";
 import { ScheduleView } from "../../components/schedule-view";
 import { Tooltip } from "../../components/tooltip";
-import type { ReadingMethod, ScheduleResult } from "../../types";
+import type { Book, ReadingMethod, ScheduleResult } from "../../types";
 
 interface Props {
+  books: Book[];
   bookCount: number;
   noDaysWarning: boolean;
   pagesPerDay: number;
   method: ReadingMethod;
   schedule: ScheduleResult | null;
+  onReorder: (books: Book[]) => void;
 }
 
 export function ScheduleSection({
+  books,
   bookCount,
   noDaysWarning,
   pagesPerDay,
   method,
   schedule,
+  onReorder,
 }: Props) {
   return (
     <section class="reading-planner__section">
@@ -33,9 +37,11 @@ export function ScheduleSection({
         </p>
       ) : schedule ? (
         <ScheduleView
+          books={books}
           result={schedule}
           pagesPerDay={pagesPerDay}
           method={method}
+          onReorder={onReorder}
         />
       ) : null}
     </section>
