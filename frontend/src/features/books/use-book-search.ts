@@ -5,7 +5,7 @@ import type { Book } from "../../types";
 const SEARCH_DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
 
-export function useBookSearch() {
+export function useBookSearch(search = searchBooks) {
   const [query, setQueryState] = useState("");
   const [results, setResults] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,7 +56,7 @@ export function useBookSearch() {
         controllerRef.current = controller;
         setLoading(true);
         try {
-          const { books, source } = await searchBooks(trimmed, {
+          const { books, source } = await search(trimmed, {
             signal: controller.signal,
           });
           if (requestId !== requestIdRef.current) return;
@@ -77,7 +77,7 @@ export function useBookSearch() {
         }
       }, SEARCH_DEBOUNCE_MS);
     },
-    [cancelCurrentSearch],
+    [cancelCurrentSearch, search],
   );
 
   return {

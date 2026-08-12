@@ -3,6 +3,7 @@ import "../../test/setup";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import type { SearchResult } from "../../services/api";
+import { useBookSearch } from "./use-book-search";
 
 const searchBooksMock = mock(
   async (
@@ -13,12 +14,6 @@ const searchBooksMock = mock(
     source: "google_books",
   }),
 );
-
-mock.module("../../services/api", () => ({
-  searchBooks: searchBooksMock,
-}));
-
-const { useBookSearch } = await import("./use-book-search");
 
 afterEach(cleanup);
 
@@ -31,7 +26,7 @@ beforeEach(() => {
 });
 
 function SearchHarness() {
-  const search = useBookSearch();
+  const search = useBookSearch(searchBooksMock);
   return (
     <div>
       <input
@@ -129,6 +124,34 @@ describe("useBookSearch", () => {
 
     await waitFor(() => expect(view.getByText("Lord Test")).toBeTruthy());
     expect(view.getByText("no error")).toBeTruthy();
+  });
+
+  test("shows a search error for the active request", async () => {
+    searchBooksMock.mockRejectedValue(new Error("Provider unavailable"));
+    const view = render(<SearchHarness />);
+
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+
+    await waitFor(
+      () => expect(view.getByText("Provider unavailable")).toBeTruthy(),
+      { timeout: 700 },
+    );
+  });
+
+  test("uses the fallback error message for non-Error failures", async () => {
+    searchBooksMock.mockRejectedValue("Provider unavailable");
+    const view = render(<SearchHarness />);
+
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+
+    await waitFor(
+      () => expect(view.getByText("Search failed")).toBeTruthy(),
+      { timeout: 700 },
+    );
   });
 
   test("cancels pending search when unmounted", async () => {

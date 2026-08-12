@@ -10,6 +10,13 @@ from hon.models.book import BookResult
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
 
 
+def test_health_reports_service_status(client: TestClient):
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_search_returns_google_books_results(client: TestClient):
     with (
         patch("hon.routers.books.search_google_books", AsyncMock(return_value=[BOOK])),

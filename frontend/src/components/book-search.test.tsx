@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import type { SearchResult } from "../services/api";
 import type { Book } from "../types";
+import { BookSearch } from "./book-search";
 
 const searchBooksMock = mock(
   async (): Promise<SearchResult> => ({
@@ -12,12 +13,6 @@ const searchBooksMock = mock(
   }),
 );
 
-mock.module("../services/api", () => ({
-  searchBooks: searchBooksMock,
-}));
-
-const { BookSearch } = await import("./book-search");
-
 afterEach(cleanup);
 
 beforeEach(() => {
@@ -25,7 +20,7 @@ beforeEach(() => {
 });
 
 test("labels search and manual entry sections", () => {
-  const view = render(<BookSearch onAdd={() => {}} />);
+  const view = render(<BookSearch onAdd={() => {}} searchBooks={searchBooksMock} />);
 
   expect(view.getByText("Add book via search")).toBeTruthy();
   expect(view.getByText("or")).toBeTruthy();
@@ -45,7 +40,7 @@ test("adds a selected result and resets search", async () => {
     source: "google_books",
   }));
   const onAdd = mock((_book: Book) => {});
-  const view = render(<BookSearch onAdd={onAdd} />);
+  const view = render(<BookSearch onAdd={onAdd} searchBooks={searchBooksMock} />);
   const input = view.getByLabelText("Search books") as HTMLInputElement;
 
   fireEvent.input(input, { target: { value: "dune" } });
@@ -61,7 +56,7 @@ test("adds a selected result and resets search", async () => {
 
 test("adds a manual book and clears the form", () => {
   const onAdd = mock((_book: Book) => {});
-  const view = render(<BookSearch onAdd={onAdd} />);
+  const view = render(<BookSearch onAdd={onAdd} searchBooks={searchBooksMock} />);
   const titleInput = view.getByLabelText("Book name") as HTMLInputElement;
   const pagesInput = view.getByLabelText("Number of pages") as HTMLInputElement;
 

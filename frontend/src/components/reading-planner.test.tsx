@@ -29,6 +29,18 @@ describe("ReadingPlanner", () => {
     expect(input.value).toBe("2");
   });
 
+  test("updates pages per day from the slider", () => {
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
+    const input = view.container.querySelector<HTMLInputElement>("#ppd-input");
+    if (!input) throw new Error("Expected pages-per-day input");
+
+    fireEvent.input(view.getByLabelText("Pages per day slider"), {
+      target: { value: "42" },
+    });
+
+    expect(input.value).toBe("42");
+  });
+
   test("supports deadlines requiring more than 200 pages per day", () => {
     const view = render(
       <ReadingPlanner
@@ -108,5 +120,32 @@ describe("ReadingPlanner", () => {
       />,
     );
     expect(pagesInput.value).toBe("20");
+  });
+
+  test("warns and disables targets when no reading days are selected", () => {
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
+
+    for (const day of ["Mo", "Tu", "We", "Th", "Fr"]) {
+      fireEvent.click(view.getByText(day));
+    }
+
+    expect(view.getByRole("alert").textContent).toBe(
+      "Select at least one reading day.",
+    );
+    expect(view.getByText("Select reading days to see your schedule.")).toBeTruthy();
+    expect(
+      view.container.querySelector<HTMLInputElement>("#ppd-input")?.disabled,
+    ).toBe(true);
+  });
+
+  test("shows a warning for a past finish date", () => {
+    const view = render(<ReadingPlanner books={books} onReorder={() => {}} />);
+    const finishInput =
+      view.container.querySelector<HTMLInputElement>("#finish-input");
+    if (!finishInput) throw new Error("Expected finish-date input");
+
+    fireEvent.input(finishInput, { target: { value: "2000-01-01" } });
+
+    expect(view.getByText("Date is in the past.")).toBeTruthy();
   });
 });

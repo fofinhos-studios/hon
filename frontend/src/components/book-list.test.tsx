@@ -1,7 +1,7 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, render } from "@testing-library/preact";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import type { Book } from "../types";
 import { BookList } from "./book-list";
 
@@ -48,5 +48,29 @@ describe("BookList", () => {
       />,
     );
     expect(populated.getByText("2 books · 300 / 300 pages left")).toBeTruthy();
+  });
+
+  test("forwards progress, removal, and drag interactions", () => {
+    const onRemove = mock(() => {});
+    const onUpdateProgress = mock(() => {});
+    const view = render(
+      <BookList
+        books={books}
+        onRemove={onRemove}
+        onReorder={() => {}}
+        onUpdateProgress={onUpdateProgress}
+      />,
+    );
+
+    fireEvent.input(view.getByLabelText("Pages read for First Book"), {
+      target: { value: "25" },
+    });
+    fireEvent.click(view.getByLabelText("Remove First Book"));
+    const item = view.getByText("First Book").closest("li");
+    if (!item) throw new Error("Expected book list item");
+    fireEvent.pointerDown(item, { pointerId: 1, clientY: 0 });
+
+    expect(onUpdateProgress).toHaveBeenCalledWith("a", 25);
+    expect(onRemove).toHaveBeenCalledWith("a");
   });
 });

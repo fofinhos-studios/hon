@@ -3,14 +3,16 @@ import { useState } from "preact/hooks";
 import { BookSearchResults } from "../features/books/book-search-results";
 import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
+import { searchBooks as defaultSearchBooks } from "../services/api";
 import type { Book } from "../types";
 
 interface Props {
   onAdd: (book: Book) => void;
+  searchBooks?: typeof defaultSearchBooks;
 }
 
-export function BookSearch({ onAdd }: Props) {
-  const search = useBookSearch();
+export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
+  const search = useBookSearch(searchBooks);
   const [manualTitle, setManualTitle] = useState("");
   const [manualPages, setManualPages] = useState("");
   const manualPageCount = Number.parseInt(manualPages, 10);

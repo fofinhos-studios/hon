@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from hon.services.google_books import normalize, search
+from hon.services.google_books import SEARCH_LIMIT, normalize, search
 from tests.conftest import async_client, response
 
 
@@ -18,6 +18,7 @@ def test_normalize_filters_malformed_items():
     assert normalize({"volumeInfo": {"title": "Missing ID", "pageCount": 10}}) is None
     assert normalize(item(pages="many")) is None
     assert normalize(item(title="   ")) is None
+    assert normalize({"volumeInfo": []}) is None
 
 
 def test_normalize_defaults_missing_author_and_cover():
@@ -25,6 +26,12 @@ def test_normalize_defaults_missing_author_and_cover():
     assert book is not None
     assert book.author == "Unknown"
     assert book.cover_url is None
+
+    empty_cover = item()
+    empty_cover["volumeInfo"]["imageLinks"] = {"thumbnail": ""}
+    normalized_empty_cover = normalize(empty_cover)
+    assert normalized_empty_cover is not None
+    assert normalized_empty_cover.cover_url is None
 
 
 def test_normalize_defaults_blank_author():
@@ -35,6 +42,16 @@ def test_normalize_defaults_blank_author():
 
     assert book is not None
     assert book.author == "Unknown"
+
+
+def test_normalize_uses_the_first_valid_author():
+    value = item()
+    value["volumeInfo"]["authors"] = ["Frank Herbert"]
+
+    book = normalize(value)
+
+    assert book is not None
+    assert book.author == "Frank Herbert"
 
 
 def test_normalize_cover_uses_https():
@@ -110,3 +127,25 @@ async def test_search_runs_provider_queries_concurrently():
         await search("dune")
 
     assert max_active == 3
+
+
+@pytest.mark.asyncio
+async def test_search_returns_empty_without_an_api_key():
+    with patch.dict(os.environ, {}, clear=True):
+        assert await search("dune") == []
+
+
+@pytest.mark.asyncio
+async def test_search_stops_after_the_result_limit():
+    client = async_client(
+        {"items": [item(f"book-{index}") for index in range(SEARCH_LIMIT)]},
+        {"items": [item("unused")]},
+        {"items": [item("also-unused")]},
+    )
+    with (
+        patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "key"}),
+        patch("hon.services.google_books.httpx.AsyncClient", return_value=client),
+    ):
+        books = await search("dune")
+
+    assert len(books) == SEARCH_LIMIT
