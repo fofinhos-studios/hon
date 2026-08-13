@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import httpx
@@ -41,34 +40,18 @@ def normalize(item: dict) -> BookResult | None:
     )
 
 
-async def _fetch(client: httpx.AsyncClient, query: str, api_key: str) -> list[BookResult]:
-    response = await client.get(
-        GOOGLE_BOOKS_URL,
-        params={"q": query, "maxResults": SEARCH_LIMIT, "printType": "books", "key": api_key},
-    )
-    response.raise_for_status()
-    data = decode_json_object(response, "Google Books")
-    return [
-        book for item in data.get("items") or [] if isinstance(item, dict) and (book := normalize(item)) is not None
-    ]
-
-
 async def search(query: str) -> list[BookResult]:
     api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
     if not api_key:
         return []
 
-    results: list[BookResult] = []
-    seen_ids: set[str] = set()
-    queries = [f"intitle:{query}", f"inauthor:{query}", query]
     async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
-        batches = await asyncio.gather(*(_fetch(client, provider_query, api_key) for provider_query in queries))
-        for books in batches:
-            for book in books:
-                if book.id in seen_ids:
-                    continue
-                seen_ids.add(book.id)
-                results.append(book)
-                if len(results) == SEARCH_LIMIT:
-                    return results
-    return results
+        response = await client.get(
+            GOOGLE_BOOKS_URL,
+            params={"q": query, "maxResults": SEARCH_LIMIT, "printType": "books", "key": api_key},
+        )
+        response.raise_for_status()
+        data = decode_json_object(response, "Google Books")
+    return [
+        book for item in data.get("items") or [] if isinstance(item, dict) and (book := normalize(item)) is not None
+    ]

@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 from unittest.mock import AsyncMock, patch
@@ -63,24 +62,17 @@ def test_normalize_cover_uses_https():
 
 
 @pytest.mark.asyncio
-async def test_search_queries_title_author_then_broad_and_deduplicates():
-    client = async_client(
-        {"items": [item("title")]},
-        {"items": [item("title"), item("author")]},
-        {"items": [item("broad")]},
-    )
+async def test_search_queries_once():
+    client = async_client({"items": [item("dune")]})
     with (
         patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "key"}),
         patch("hon.services.google_books.httpx.AsyncClient", return_value=client),
     ):
         books = await search("dune")
 
-    assert [book.id for book in books] == ["title", "author", "broad"]
-    assert [call.kwargs["params"]["q"] for call in client.get.call_args_list] == [
-        "intitle:dune",
-        "inauthor:dune",
-        "dune",
-    ]
+    assert [book.id for book in books] == ["dune"]
+    assert client.get.call_count == 1
+    assert client.get.call_args.kwargs["params"]["q"] == "dune"
 
 
 @pytest.mark.asyncio
@@ -106,30 +98,6 @@ async def test_search_translates_malformed_json():
 
 
 @pytest.mark.asyncio
-async def test_search_runs_provider_queries_concurrently():
-    active = 0
-    max_active = 0
-
-    async def get(*_args, **_kwargs):
-        nonlocal active, max_active
-        active += 1
-        max_active = max(max_active, active)
-        await asyncio.sleep(0)
-        active -= 1
-        return response({"items": []})
-
-    client = async_client()
-    client.get = AsyncMock(side_effect=get)
-    with (
-        patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "key"}),
-        patch("hon.services.google_books.httpx.AsyncClient", return_value=client),
-    ):
-        await search("dune")
-
-    assert max_active == 3
-
-
-@pytest.mark.asyncio
 async def test_search_returns_empty_without_an_api_key():
     with patch.dict(os.environ, {}, clear=True):
         assert await search("dune") == []
@@ -137,11 +105,7 @@ async def test_search_returns_empty_without_an_api_key():
 
 @pytest.mark.asyncio
 async def test_search_stops_after_the_result_limit():
-    client = async_client(
-        {"items": [item(f"book-{index}") for index in range(SEARCH_LIMIT)]},
-        {"items": [item("unused")]},
-        {"items": [item("also-unused")]},
-    )
+    client = async_client({"items": [item(f"book-{index}") for index in range(SEARCH_LIMIT)]})
     with (
         patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "key"}),
         patch("hon.services.google_books.httpx.AsyncClient", return_value=client),

@@ -14,7 +14,7 @@ const books: Book[] = [
 ];
 
 describe("book storage", () => {
-  test("round trips versioned book data", () => {
+  test("round trips book data", () => {
     const storage = new Map<string, string>();
     const adapter = {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -26,14 +26,23 @@ describe("book storage", () => {
     expect(loadBooks(adapter)).toEqual(books);
   });
 
-  test("returns empty list for malformed or unsupported data", () => {
+  test("returns empty list for malformed or invalid data", () => {
     const adapter = {
-      getItem: () => '{"version":99,"books":[]}',
+      getItem: () => '{"books":[]}',
       setItem: () => {},
     };
     expect(loadBooks(adapter)).toEqual([]);
 
     adapter.getItem = () => "not-json";
     expect(loadBooks(adapter)).toEqual([]);
+  });
+
+  test("reads legacy versioned book data", () => {
+    const adapter = {
+      getItem: () => JSON.stringify({ version: 1, books }),
+      setItem: () => {},
+    };
+
+    expect(loadBooks(adapter)).toEqual(books);
   });
 });

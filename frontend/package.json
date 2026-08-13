@@ -27,7 +27,6 @@
   "dependencies": {
     "@preact/preset-vite": "^2.10.5",
     "lucide-preact": "^1.7.0",
-    "preact": "^10.29.0",
-    "preact-router": "^4.1.2"
+    "preact": "^10.29.0"
   }
 }
