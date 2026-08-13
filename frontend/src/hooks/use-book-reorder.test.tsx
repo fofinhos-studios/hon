@@ -1,7 +1,7 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Book } from "../types";
 import { useBookReorder } from "./use-book-reorder";
 
@@ -61,7 +61,7 @@ function setBookRects(view: ReturnType<typeof render>) {
 
 describe("useBookReorder", () => {
   test("reorders books after dragging across another slot", async () => {
-    const onReorder = mock((_books: Book[]) => {});
+    const onReorder = vi.fn((_books: Book[]) => {});
     const view = render(<ReorderHarness onReorder={onReorder} />);
     const { first } = setBookRects(view);
 

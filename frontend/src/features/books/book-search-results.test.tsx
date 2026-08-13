@@ -1,7 +1,7 @@
 import "../../test/setup";
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Book } from "../../types";
 import { BookSearchResults } from "./book-search-results";
 
@@ -17,7 +17,7 @@ const book: Book = {
 
 describe("BookSearchResults", () => {
   test("renders results and selects a book", () => {
-    const onSelect = mock((_book: Book) => {});
+    const onSelect = vi.fn((_book: Book) => {});
     const view = render(
       <BookSearchResults
         results={[book]}

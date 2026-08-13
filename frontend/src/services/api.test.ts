@@ -1,6 +1,6 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { searchBooks } from "./api";
 
 const originalFetch = globalThis.fetch;
@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function mockFetch(response: Partial<Response>) {
-  const fetchMock = mock(async () => response as Response);
+  const fetchMock = vi.fn(async () => response as Response);
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
 }
@@ -23,7 +23,9 @@ describe("searchBooks", () => {
     });
     const controller = new AbortController();
 
-    expect(await searchBooks("Dune & Messiah", { signal: controller.signal })).toEqual({
+    expect(
+      await searchBooks("Dune & Messiah", { signal: controller.signal }),
+    ).toEqual({
       books: [],
       source: "google_books",
     });

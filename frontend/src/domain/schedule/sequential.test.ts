@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { calculateSequentialSchedule } from "./sequential";
 import { EVERY_DAY, makeBook } from "./test-fixtures";
 

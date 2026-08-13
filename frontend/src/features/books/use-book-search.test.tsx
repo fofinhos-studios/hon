@@ -1,11 +1,11 @@
 import "../../test/setup";
 
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { SearchResult } from "../../services/api";
 import { useBookSearch } from "./use-book-search";
 
-const searchBooksMock = mock(
+const searchBooksMock = vi.fn(
   async (
     _query: string,
     _options?: { signal?: AbortSignal },
@@ -148,10 +148,9 @@ describe("useBookSearch", () => {
       target: { value: "dune" },
     });
 
-    await waitFor(
-      () => expect(view.getByText("Search failed")).toBeTruthy(),
-      { timeout: 700 },
-    );
+    await waitFor(() => expect(view.getByText("Search failed")).toBeTruthy(), {
+      timeout: 700,
+    });
   });
 
   test("cancels pending search when unmounted", async () => {

@@ -1,7 +1,7 @@
 import "./test/setup";
 
-import { afterEach, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/preact";
+import { afterEach, expect, test } from "vitest";
 import { App } from "./app";
 
 afterEach(cleanup);

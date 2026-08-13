@@ -1,7 +1,7 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test } from "vitest";
 import { addReadingDays, todayISO } from "../domain/schedule";
 import type { Book, DayOfWeek } from "../types";
 import { ReadingPlanner } from "./reading-planner";
@@ -132,7 +132,9 @@ describe("ReadingPlanner", () => {
     expect(view.getByRole("alert").textContent).toBe(
       "Select at least one reading day.",
     );
-    expect(view.getByText("Select reading days to see your schedule.")).toBeTruthy();
+    expect(
+      view.getByText("Select reading days to see your schedule."),
+    ).toBeTruthy();
     expect(
       view.container.querySelector<HTMLInputElement>("#ppd-input")?.disabled,
     ).toBe(true);

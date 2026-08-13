@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { calculateInterleavedSchedule } from "./interleaved";
 import { EVERY_DAY, makeBook } from "./test-fixtures";
 

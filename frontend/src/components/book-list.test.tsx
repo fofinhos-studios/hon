@@ -1,7 +1,7 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Book } from "../types";
 import { BookList } from "./book-list";
 
@@ -51,8 +51,8 @@ describe("BookList", () => {
   });
 
   test("forwards progress, removal, and drag interactions", () => {
-    const onRemove = mock(() => {});
-    const onUpdateProgress = mock(() => {});
+    const onRemove = vi.fn(() => {});
+    const onUpdateProgress = vi.fn(() => {});
     const view = render(
       <BookList
         books={books}

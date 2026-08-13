@@ -1,7 +1,7 @@
 import "../../test/setup";
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Book } from "../../types";
 import { BookCard } from "./book-card";
 
@@ -17,7 +17,7 @@ const book: Book = {
 
 describe("BookCard", () => {
   test("updates pages and percentage progress", () => {
-    const onUpdateProgress = mock((_pages: number | undefined) => {});
+    const onUpdateProgress = vi.fn((_pages: number | undefined) => {});
     const view = render(
       <BookCard
         book={book}
@@ -42,7 +42,7 @@ describe("BookCard", () => {
   });
 
   test("removes book", () => {
-    const onRemove = mock(() => {});
+    const onRemove = vi.fn(() => {});
     const view = render(
       <BookCard
         book={book}

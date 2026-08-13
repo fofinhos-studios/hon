@@ -1,6 +1,6 @@
 import "../test/setup";
-import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { DayOfWeek } from "../types";
 import { DayPicker } from "./day-picker";
 
@@ -25,7 +25,7 @@ describe("DayPicker", () => {
   });
 
   test("clicking a day toggles it", () => {
-    const onChange = mock((days: DayOfWeek[]) => days);
+    const onChange = vi.fn((days: DayOfWeek[]) => days);
     const view = render(<DayPicker selected={[]} onChange={onChange} />);
     const button = view.getByText("Mo").closest("button");
     if (!button) throw new Error("Mo button not found");
@@ -34,7 +34,7 @@ describe("DayPicker", () => {
   });
 
   test("clicking an active day removes it", () => {
-    const onChange = mock((days: DayOfWeek[]) => days);
+    const onChange = vi.fn((days: DayOfWeek[]) => days);
     const view = render(<DayPicker selected={[0]} onChange={onChange} />);
     const button = view.getByText("Mo").closest("button");
     if (!button) throw new Error("Mo button not found");

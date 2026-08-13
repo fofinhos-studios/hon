@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { addReadingDays, countReadingDays } from "./dates";
 import { EVERY_DAY, WEEKDAYS, WEEKENDS } from "./test-fixtures";
 

@@ -1,7 +1,7 @@
 import "../test/setup";
 
-import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/preact";
+import { afterEach, describe, expect, test } from "vitest";
 import { Tooltip } from "./tooltip";
 
 afterEach(cleanup);
