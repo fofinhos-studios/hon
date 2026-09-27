@@ -10,7 +10,11 @@ const books: Book[] = ["a", "b", "c"].map((id) => ({
   page_count: 100,
   cover_url: null,
 }));
-const visuals: BookVisuals = { dominant_color: "#123456", artwork: null };
+const visuals: BookVisuals = {
+  color_version: 2,
+  dominant_color: "#123456",
+  artwork: null,
+};
 
 test("refreshes old partial visuals on a later visit", async () => {
   const fetcher = vi.fn(async () => visuals);
@@ -98,4 +102,26 @@ test("skips persisted visuals and does not loop when service fails", async () =>
   view.rerender(<Harness items={[...items]} />);
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(onVisuals).not.toHaveBeenCalled();
+});
+
+test("refreshes a saved color from the old algorithm even when recently checked", async () => {
+  const fetcher = vi.fn(async () => visuals);
+  const onVisuals = vi.fn();
+  function Harness() {
+    useBookVisuals(
+      [
+        {
+          ...books[0],
+          visuals: { dominant_color: "#eedd33", artwork: null },
+          visuals_checked_at: Date.now(),
+        },
+      ],
+      onVisuals,
+      fetcher,
+    );
+    return null;
+  }
+  render(<Harness />);
+  await waitFor(() => expect(onVisuals).toHaveBeenCalledWith("a", visuals));
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

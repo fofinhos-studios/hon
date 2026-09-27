@@ -1,4 +1,5 @@
 import asyncio
+import colorsys
 import io
 from unittest.mock import AsyncMock, patch
 
@@ -146,7 +147,7 @@ def test_art_requires_title_author_and_usable_credit():
 async def test_commons_query_uses_file_namespace_and_thumbnail_metadata():
     def respond(request):
         assert request.url.params["gsrnamespace"] == "6"
-        assert request.url.params["iiurlwidth"] == "960"
+        assert request.url.params["iiurlwidth"] == "640"
         return httpx.Response(200, json={"query": {"pages": [artwork_page()]}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
@@ -194,5 +195,41 @@ def test_visual_route_and_validation(client):
     with patch("hon.routers.books.get_visuals", AsyncMock(return_value=BookVisuals())):
         response = client.post("/books/visuals", json=BOOK.model_dump())
         assert response.status_code == 200
-        assert response.json() == {"dominant_color": None, "artwork": None}
+        assert response.json() == {"color_version": 2, "dominant_color": None, "artwork": None}
         assert client.post("/books/visuals", json={"id": "", "title": ""}).status_code == 422
+
+
+@pytest.mark.parametrize("base_hue", [0.34, 0.0])
+def test_color_groups_dominant_shades_instead_of_selecting_a_bright_detail(base_hue):
+    image = Image.new("RGB", (96, 96))
+    pixels = []
+    for y in range(96):
+        for x in range(96):
+            if x < 68:
+                hue = (base_hue + (y % 9 - 4) / 360) % 1
+                saturation = 0.25 + (y % 7) * 0.09
+                value = 0.3 + (x % 11) * 0.055
+                pixels.append(tuple(round(c * 255) for c in colorsys.hsv_to_rgb(hue, saturation, value)))
+            else:
+                pixels.append((245, 220, 35))
+    image.putdata(pixels)
+    data = io.BytesIO()
+    image.save(data, "PNG")
+    color = visuals.dominant_color(data.getvalue())
+    assert color is not None
+    rgb = tuple(int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    hue, _, _ = colorsys.rgb_to_hsv(*rgb)
+    assert min(abs(hue - base_hue), 1 - abs(hue - base_hue)) < 0.05
+
+
+async def test_download_accepts_large_publisher_cover_within_bounded_limit():
+    # Weyward's publisher PNG is about 10 MB and was previously discarded.
+    data = b"x" * 10_109_024
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, content=data, headers={"content-type": "image/png"})
+        )
+    ) as client:
+        assert await visuals.download_cover(
+            client, "https://fl-storage.bookinfometadados.com.br/cover.png"
+        ) == data

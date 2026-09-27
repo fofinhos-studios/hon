@@ -1,5 +1,7 @@
-import { BookCover } from "../features/books/book-art";
+import { useState } from "preact/hooks";
+import { BookBackdrop, BookCover } from "../features/books/book-art";
 import { bookVisualStyle } from "../features/books/book-visuals";
+import { goodreadsBookUrl } from "../features/books/goodreads-link";
 import { useBookReorder } from "../hooks/use-book-reorder";
 import type { Book, ReadingMethod, ScheduleResult } from "../types";
 import { Icon } from "./icon";
@@ -13,12 +15,12 @@ interface Props {
   onReorder: (books: Book[]) => void;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, compact = false): string {
   const d = new Date(`${iso}T00:00:00Z`);
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    year: compact ? undefined : "numeric",
     timeZone: "UTC",
   });
 }
@@ -30,6 +32,7 @@ export function ScheduleView({
   method,
   onReorder,
 }: Props) {
+  const [collapsed, setCollapsed] = useState(true);
   const { dragState, getItemStyle, handlePointerDown, setItemRef } =
     useBookReorder(books, onReorder);
   const schedulesByBookId = new Map(
@@ -37,16 +40,34 @@ export function ScheduleView({
   );
 
   return (
-    <div class={`schedule-view schedule-view--${method}`}>
+    <div
+      class={`schedule-view schedule-view--${method}${collapsed ? " schedule-view--compact" : ""}`}
+    >
+      <div class="hon-section-heading">
+        <h2>
+          <Icon name="route" size={24} />
+          <span>Schedule</span>
+        </h2>
+        <button
+          type="button"
+          class="hon-btn schedule-view__toggle"
+          aria-expanded={!collapsed}
+          aria-controls="schedule-cards"
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <Icon name={collapsed ? "expand" : "collapse"} size={16} />
+          {collapsed ? "Expand cards" : "Collapse cards"}
+        </button>
+      </div>
       <div class="schedule-view__summary hon-mono">
-        <span>
+        <span class="schedule-view__finish">
+          Finishes {formatDate(result.finish_date)}
+        </span>
+        <span class="schedule-view__totals">
+          {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
           {result.total_pages.toLocaleString()} pages ·{" "}
           {result.total_reading_days} reading day
           {result.total_reading_days === 1 ? "" : "s"} · {pagesPerDay}pp/day
-          {method === "interleaved" ? " shared total" : ""}
-        </span>
-        <span class="schedule-view__finish">
-          Finishes {formatDate(result.finish_date)}
         </span>
       </div>
 
@@ -57,11 +78,18 @@ export function ScheduleView({
         </p>
       )}
 
-      <ul class="schedule-view__list" aria-label="Reorder your schedule">
+      <ul
+        class="schedule-view__list"
+        id="schedule-cards"
+        aria-label="Reorder your schedule"
+      >
         {books.flatMap((book, index) => {
           const schedule = schedulesByBookId.get(book.id);
           if (!schedule) return [];
           const { start_date, finish_date, daily_pages } = schedule;
+          const imagePriority =
+            index === 0 ? "high" : index === 1 ? "eager" : undefined;
+          const goodreadsUrl = goodreadsBookUrl(book);
           const isDragging =
             dragState?.bookId === book.id && dragState.activated;
           const isDropTarget =
@@ -79,28 +107,109 @@ export function ScheduleView({
                 ...getItemStyle(index, book.id),
               }}
             >
-              <div class="schedule-view__cover">
-                <BookCover book={book} />
-                <span class="schedule-view__station">
-                  <span class="sr-only">Position </span>
-                  {String(index + 1).padStart(2, "0")}
+              <BookBackdrop book={book} priority={imagePriority} />
+              {collapsed ? (
+                <span
+                  class="reorder-handle schedule-view__spine-handle"
+                  title="Drag to reorder"
+                  onPointerDown={(event) => handlePointerDown(book.id, event)}
+                >
+                  <Icon name="grip" size={20} aria-hidden="true" />
+                  <span class="schedule-view__spine-number hon-mono">
+                    <span class="sr-only">Position </span>
+                    {index + 1}
+                  </span>
                 </span>
-              </div>
+              ) : (
+                <div class="schedule-view__expanded-media">
+                  <span
+                    class="reorder-handle"
+                    title="Drag to reorder"
+                    onPointerDown={(event) => handlePointerDown(book.id, event)}
+                  >
+                    <Icon name="grip" />
+                  </span>
+                  <div class="schedule-view__cover">
+                    <a
+                      class="book-cover-link"
+                      href={goodreadsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+                    >
+                      <BookCover book={book} priority={imagePriority} />
+                    </a>
+                    <span class="schedule-view__station">
+                      <span class="sr-only">Position </span>
+                      {index + 1}
+                    </span>
+                  </div>
+                </div>
+              )}
               <div class="schedule-view__content">
                 <div class="schedule-view__book-info">
-                  <span class="schedule-view__book-title">{book.title}</span>
-                  <span class="schedule-view__book-pages hon-mono">
-                    {book.pages_read && book.pages_read > 0
-                      ? `${book.pages_read.toLocaleString()} / ${book.page_count.toLocaleString()} pp`
-                      : `${book.page_count.toLocaleString()} pp`}
-                  </span>
+                  <a
+                    class="schedule-view__book-title book-title-link"
+                    href={goodreadsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+                    title={
+                      collapsed
+                        ? `${book.title} — ${book.author} · View on Goodreads`
+                        : "View on Goodreads"
+                    }
+                  >
+                    {book.title}
+                  </a>
+                  {collapsed && <span class="sr-only">{book.author}</span>}
+                  {!collapsed && (
+                    <span class="schedule-view__book-pages hon-mono">
+                      {book.pages_read && book.pages_read > 0
+                        ? `${book.pages_read.toLocaleString()} / ${book.page_count.toLocaleString()} pp`
+                        : `${book.page_count.toLocaleString()} pp`}
+                    </span>
+                  )}
                 </div>
-                <div class="schedule-view__dates hon-mono">
-                  <span>{formatDate(start_date)}</span>
-                  <Icon name="arrowRight" size={16} />
-                  <span>{formatDate(finish_date)}</span>
+                <div
+                  class={
+                    collapsed
+                      ? "schedule-view__spine-meta hon-mono"
+                      : "schedule-view__dates hon-mono"
+                  }
+                >
+                  {collapsed ? (
+                    <>
+                      <span class="schedule-view__book-pages">
+                        {book.pages_read
+                          ? `${book.pages_read.toLocaleString()} / `
+                          : ""}
+                        {book.page_count.toLocaleString()} pp
+                      </span>
+                      <span aria-hidden="true">•</span>
+                      <span
+                        class="schedule-view__spine-dates"
+                        title={`${formatDate(start_date)} → ${formatDate(finish_date)}`}
+                      >
+                        <span class="sr-only">
+                          {formatDate(start_date)} to {formatDate(finish_date)}
+                        </span>
+                        <span aria-hidden="true">
+                          {formatDate(start_date, true)} →{" "}
+                          {formatDate(finish_date, true)}
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{formatDate(start_date)}</span>
+                      <Icon name="arrowRight" size={16} />
+                      <span>{formatDate(finish_date)}</span>
+                    </>
+                  )}
                 </div>
                 <ReorderControls
+                  showHandle={false}
                   title={book.title}
                   first={index === 0}
                   last={index === books.length - 1}
@@ -113,7 +222,13 @@ export function ScheduleView({
                   }}
                 />
                 {method === "interleaved" && daily_pages ? (
-                  <p class="schedule-view__detail hon-mono">
+                  <p
+                    class={
+                      collapsed
+                        ? "sr-only schedule-view__detail"
+                        : "schedule-view__detail hon-mono"
+                    }
+                  >
                     About {daily_pages} pages/day
                   </p>
                 ) : null}

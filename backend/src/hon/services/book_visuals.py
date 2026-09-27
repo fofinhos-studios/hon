@@ -1,6 +1,7 @@
 """Optional visual enrichment. Catalog search and scheduling never wait for this service."""
 
 import asyncio
+import colorsys
 import html
 import io
 import logging
@@ -27,7 +28,8 @@ COVER_HOSTS = frozenset(
         "fl-storage.bookinfometadados.com.br",
     }
 )
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# Publisher PNG covers can exceed 5 MB even at ordinary print dimensions.
+MAX_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_IMAGE_PIXELS = 16_000_000
 MAX_CACHE_ITEMS = 256
 MAX_IN_FLIGHT = 8
@@ -114,14 +116,19 @@ def dominant_color(data: bytes) -> str | None:
                 useful.append((r, g, b))
             if len(useful) < image.width * image.height * 0.02:
                 return None
-            sample = Image.new("RGB", (len(useful), 1))
-            sample.putdata(useful)
-            palette = sample.quantize(colors=8).convert("RGB")
-            colors = palette.getcolors(len(useful)) or []
-            if not colors:
-                return None
-            _, color = max(colors, key=lambda item: item[0])
-            r, g, b = color
+            # Count area, not saturation. Group neighboring hues so shadows and
+            # highlights of the same color cannot lose to one flat accent.
+            # Circular windows also keep reds on either side of 0 degrees together.
+            buckets: list[list[tuple[int, int, int]]] = [[] for _ in range(36)]
+            for r, g, b in useful:
+                hue, _, _ = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                buckets[int(hue * 36) % 36].append((r, g, b))
+            center = max(
+                range(36),
+                key=lambda i: sum(len(buckets[(i + offset) % 36]) for offset in range(-2, 3)),
+            )
+            dominant = [pixel for offset in range(-2, 3) for pixel in buckets[(center + offset) % 36]]
+            r, g, b = (round(sum(pixel[channel] for pixel in dominant) / len(dominant)) for channel in range(3))
             return f"#{r:02x}{g:02x}{b:02x}"
     except UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError:
         return None
@@ -208,7 +215,7 @@ async def find_artwork(client: httpx.AsyncClient, book: VisualRequest) -> Artwor
             "gsrlimit": 8,
             "prop": "imageinfo",
             "iiprop": "url|size|mime|extmetadata",
-            "iiurlwidth": 960,
+            "iiurlwidth": 640,
             "iiextmetadatafilter": "Artist|LicenseShortName|ImageDescription|ObjectName|Categories",
         },
     )

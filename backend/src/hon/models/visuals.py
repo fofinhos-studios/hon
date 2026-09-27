@@ -18,5 +18,6 @@ class Artwork(BaseModel):
 
 
 class BookVisuals(BaseModel):
+    color_version: int = 2
     dominant_color: str | None = None
     artwork: Artwork | None = None

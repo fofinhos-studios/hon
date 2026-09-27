@@ -116,10 +116,7 @@ export function DesignSystemGallery() {
         <ul class="book-list__items">
           <BookCard
             book={book}
-            isDragging={false}
-            isDropTarget={false}
-            itemRef={() => {}}
-            onPointerDown={() => {}}
+            onUpdatePageCount={(page_count) => setBook({ ...book, page_count })}
             onRemove={() => setBook(sample)}
             onUpdateProgress={(pages_read) => setBook({ ...book, pages_read })}
           />

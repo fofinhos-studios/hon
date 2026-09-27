@@ -20,14 +20,16 @@ export function usePersistentBooks() {
   return {
     books,
     updateVisuals,
-    toggleBackground: (id: string) =>
+    updatePageCount: (id: string, pages: number) => {
+      if (!Number.isSafeInteger(pages) || pages < 1) return;
       setBooks((current) =>
         current.map((book) =>
-          book.id === id
-            ? { ...book, background_hidden: !book.background_hidden }
+          book.id === id && pages >= (book.pages_read ?? 0)
+            ? { ...book, page_count: pages }
             : book,
         ),
-      ),
+      );
+    },
     addBook: (book: Book) =>
       setBooks((current) =>
         current.some((candidate) => candidate.id === book.id)

@@ -25,32 +25,28 @@ const books: Book[] = [
 ];
 
 describe("BookList", () => {
-  test("offers keyboard-operable ordering without changing book identity", () => {
-    const onReorder = vi.fn();
+  test("leaves reordering in the schedule and places the number before the title", () => {
     const view = render(
       <BookList
         books={books}
         onRemove={() => {}}
-        onReorder={onReorder}
         onUpdateProgress={() => {}}
+        onUpdatePageCount={() => {}}
       />,
     );
-    fireEvent.click(view.getByRole("button", { name: "Move First Book down" }));
-    expect(onReorder).toHaveBeenCalledWith([books[1], books[0]]);
-    expect(
-      view
-        .getByRole("button", {
-          name: "Move First Book up",
-        })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+    expect(view.queryByRole("button", { name: /Move / })).toBeNull();
+    expect(view.container.querySelector(".reorder-handle")).toBeNull();
+    expect(view.queryByText("To read")).toBeNull();
+    expect(view.getByRole("heading", { name: /First Book/ }).textContent).toBe(
+      "Position 1First Book",
+    );
   });
-  test("renders empty state and summary", () => {
+  test("renders empty state without duplicate library totals", () => {
     const empty = render(
       <BookList
         books={[]}
         onRemove={() => {}}
-        onReorder={() => {}}
+        onUpdatePageCount={() => {}}
         onUpdateProgress={() => {}}
       />,
     );
@@ -61,21 +57,21 @@ describe("BookList", () => {
       <BookList
         books={books}
         onRemove={() => {}}
-        onReorder={() => {}}
+        onUpdatePageCount={() => {}}
         onUpdateProgress={() => {}}
       />,
     );
-    expect(populated.getByText("2 books · 300 / 300 pages left")).toBeTruthy();
+    expect(populated.queryByText(/pages left/)).toBeNull();
   });
 
-  test("forwards progress, removal, and drag interactions", () => {
+  test("forwards progress and removal", () => {
     const onRemove = vi.fn(() => {});
     const onUpdateProgress = vi.fn(() => {});
     const view = render(
       <BookList
         books={books}
         onRemove={onRemove}
-        onReorder={() => {}}
+        onUpdatePageCount={() => {}}
         onUpdateProgress={onUpdateProgress}
       />,
     );

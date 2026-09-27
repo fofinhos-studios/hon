@@ -6,6 +6,7 @@ interface Props {
   onMove?: (direction: -1 | 1) => void;
   first?: boolean;
   last?: boolean;
+  showHandle?: boolean;
 }
 
 export function ReorderControls({
@@ -14,16 +15,19 @@ export function ReorderControls({
   onMove,
   first,
   last,
+  showHandle = true,
 }: Props) {
   return (
     <div class="reorder-controls">
-      <span
-        class="reorder-handle"
-        onPointerDown={onPointerDown}
-        aria-hidden="true"
-      >
-        <Icon name="grip" />
-      </span>
+      {showHandle && (
+        <span
+          class="reorder-handle"
+          onPointerDown={onPointerDown}
+          aria-hidden="true"
+        >
+          <Icon name="grip" />
+        </span>
+      )}
       {onMove && (
         <>
           <button

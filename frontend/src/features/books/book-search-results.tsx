@@ -18,14 +18,19 @@ export function BookSearchResults({ results, onSelect }: Props) {
   if (results.length === 0) return null;
   return (
     <ul class="book-search__results" id="book-search-results">
-      {results.map((book) => (
+      {results.map((book, index) => (
         <li key={book.id} class="book-search__result-item">
           <button
             type="button"
             class="book-search__result"
             onClick={() => onSelect(book)}
           >
-            <BookCover book={book} />
+            <BookCover
+              book={book}
+              priority={
+                index === 0 ? "high" : index === 1 ? "eager" : undefined
+              }
+            />
             <span class="book-search__result-info">
               <span class="book-search__result-title">{book.title}</span>
               <span class="book-search__result-meta">{book.author}</span>

@@ -2,6 +2,8 @@ import arrowUpRight from "@phosphor-icons/core/assets/bold/arrow-up-right-bold.s
 import arrowDown from "@phosphor-icons/core/assets/regular/arrow-down.svg?raw";
 import arrowRight from "@phosphor-icons/core/assets/regular/arrow-right.svg?raw";
 import arrowUp from "@phosphor-icons/core/assets/regular/arrow-up.svg?raw";
+import collapse from "@phosphor-icons/core/assets/regular/arrows-in-simple.svg?raw";
+import expand from "@phosphor-icons/core/assets/regular/arrows-out-simple.svg?raw";
 import bookOpen from "@phosphor-icons/core/assets/regular/book-open.svg?raw";
 import books from "@phosphor-icons/core/assets/regular/books.svg?raw";
 import calendar from "@phosphor-icons/core/assets/regular/calendar-dots.svg?raw";
@@ -14,6 +16,7 @@ import split from "@phosphor-icons/core/assets/regular/git-fork.svg?raw";
 import info from "@phosphor-icons/core/assets/regular/info.svg?raw";
 import search from "@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw";
 import route from "@phosphor-icons/core/assets/regular/path.svg?raw";
+import pencil from "@phosphor-icons/core/assets/regular/pencil-simple.svg?raw";
 import plus from "@phosphor-icons/core/assets/regular/plus.svg?raw";
 import help from "@phosphor-icons/core/assets/regular/question.svg?raw";
 import x from "@phosphor-icons/core/assets/regular/x.svg?raw";
@@ -27,12 +30,15 @@ const icons = {
   books,
   calendar,
   clock,
+  collapse,
   eye,
   eyeSlash,
+  expand,
   grip,
   help,
   info,
   plus,
+  pencil,
   route,
   search,
   spinner,

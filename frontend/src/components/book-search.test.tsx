@@ -19,14 +19,18 @@ beforeEach(() => {
   searchBooksMock.mockReset();
 });
 
-test("labels search and manual entry sections", () => {
+test("keeps manual entry beside search and opens it on demand", () => {
   const view = render(
     <BookSearch onAdd={() => {}} searchBooks={searchBooksMock} />,
   );
 
   expect(view.getByText("Find a book")).toBeTruthy();
-  expect(view.getByText("or")).toBeTruthy();
-  expect(view.getByText("Manual entry")).toBeTruthy();
+  expect(view.queryByLabelText("Book name")).toBeNull();
+  const toggle = view.getByRole("button", { name: "Add manually" });
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(view.getByLabelText("Book name")).toBeTruthy();
 });
 
 test("adds a selected result and resets search", async () => {
@@ -109,10 +113,15 @@ test("adds a manual book and clears the form", () => {
   const view = render(
     <BookSearch onAdd={onAdd} searchBooks={searchBooksMock} />,
   );
+  fireEvent.click(view.getByRole("button", { name: "Add manually" }));
   const titleInput = view.getByLabelText("Book name") as HTMLInputElement;
   const pagesInput = view.getByLabelText("Number of pages") as HTMLInputElement;
 
   fireEvent.input(titleInput, { target: { value: "House of Leaves" } });
+  fireEvent.input(pagesInput, { target: { value: "12.5" } });
+  expect(
+    view.getByRole("button", { name: "Add book" }).hasAttribute("disabled"),
+  ).toBe(true);
   fireEvent.input(pagesInput, { target: { value: "709" } });
   fireEvent.click(view.getByRole("button", { name: "Add book" }));
 
@@ -123,8 +132,9 @@ test("adds a manual book and clears the form", () => {
     page_count: 709,
     cover_url: null,
   });
-  expect(titleInput.value).toBe("");
-  expect(pagesInput.value).toBe("");
+  expect(view.queryByLabelText("Book name")).toBeNull();
+  expect(view.queryByLabelText("Number of pages")).toBeNull();
+  expect(document.activeElement).toBe(view.getByLabelText("Search books"));
 });
 
 test("keeps an edition without pages and asks for its count before adding", async () => {

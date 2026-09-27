@@ -21,6 +21,7 @@ export function useBookVisuals(
       if (running.current.size >= 2) break;
       if (
         (book.visuals &&
+          (book.visuals.color_version ?? 0) >= 2 &&
           (!book.visuals_checked_at ||
             Date.now() - book.visuals_checked_at <
               (book.visuals.artwork && book.visuals.dominant_color

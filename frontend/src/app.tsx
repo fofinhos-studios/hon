@@ -48,17 +48,13 @@ export function App() {
                 <Icon name="books" size={24} />
                 Your books
               </h2>
-              <span class="hon-count">
-                {String(library.books.length).padStart(2, "0")}
-              </span>
             </div>
             <BookSearch onAdd={library.addBook} />
             <BookList
               books={library.books}
               onRemove={library.removeBook}
-              onReorder={library.reorderBooks}
               onUpdateProgress={library.updateProgress}
-              onToggleBackground={library.toggleBackground}
+              onUpdatePageCount={library.updatePageCount}
             />
           </section>
           <aside

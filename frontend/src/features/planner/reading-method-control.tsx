@@ -1,4 +1,5 @@
 import { Icon } from "../../components/icon";
+import { Tooltip } from "../../components/tooltip";
 import type { ReadingMethod } from "../../types";
 
 const METHODS: ReadingMethod[] = ["sequential", "interleaved"];
@@ -14,6 +15,7 @@ export function ReadingMethodControl({ method, onChange }: Props) {
       <p class="hon-section-title">
         <Icon name="split" size={14} aria-hidden="true" />
         <span>Reading method</span>
+        <Tooltip content="Sequential finishes books in order. Interleaved splits daily pages across books." />
       </p>
       <fieldset
         class="reading-planner__method-group"

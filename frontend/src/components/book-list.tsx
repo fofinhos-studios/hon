@@ -1,27 +1,20 @@
 import { BookCard } from "../features/books/book-card";
 import { BookListEmpty } from "../features/books/book-list-empty";
-import { BookListSummary } from "../features/books/book-list-summary";
-import { useBookReorder } from "../hooks/use-book-reorder";
 import type { Book } from "../types";
 
 interface Props {
   books: Book[];
   onRemove: (id: string) => void;
-  onReorder: (books: Book[]) => void;
   onUpdateProgress: (id: string, pagesRead: number | undefined) => void;
-  onToggleBackground?: (id: string) => void;
+  onUpdatePageCount: (id: string, pages: number) => void;
 }
 
 export function BookList({
   books,
   onRemove,
-  onReorder,
   onUpdateProgress,
-  onToggleBackground,
+  onUpdatePageCount,
 }: Props) {
-  const { dragState, getItemStyle, handlePointerDown, setItemRef } =
-    useBookReorder(books, onReorder);
-
   if (books.length === 0) return <BookListEmpty />;
 
   return (
@@ -32,32 +25,14 @@ export function BookList({
             key={book.id}
             book={book}
             index={index}
-            last={index === books.length - 1}
-            onMove={(direction) => {
-              const next = [...books];
-              const [moved] = next.splice(index, 1);
-              next.splice(index + direction, 0, moved);
-              onReorder(next);
-            }}
-            onToggleBackground={
-              onToggleBackground ? () => onToggleBackground(book.id) : undefined
-            }
-            isDragging={dragState?.bookId === book.id && dragState.activated}
-            isDropTarget={
-              dragState?.targetIndex === index &&
-              dragState.targetIndex !== dragState.originIndex
-            }
-            style={getItemStyle(index, book.id)}
-            onPointerDown={(event) => handlePointerDown(book.id, event)}
+            onUpdatePageCount={(pages) => onUpdatePageCount(book.id, pages)}
             onRemove={() => onRemove(book.id)}
             onUpdateProgress={(pagesRead) =>
               onUpdateProgress(book.id, pagesRead)
             }
-            itemRef={(element) => setItemRef(book.id, element)}
           />
         ))}
       </ul>
-      <BookListSummary books={books} />
     </div>
   );
 }

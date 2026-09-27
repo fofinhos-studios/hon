@@ -21,14 +21,17 @@ export function ScheduleSection({
   schedule,
   onReorder,
 }: Props) {
+  const showSchedule = bookCount > 0 && !noDaysWarning && schedule !== null;
   return (
     <section class="reading-planner__section">
-      <div class="hon-section-heading">
-        <h2>
-          <Icon name="route" size={24} />
-          <span>Schedule</span>
-        </h2>
-      </div>
+      {!showSchedule && (
+        <div class="hon-section-heading">
+          <h2>
+            <Icon name="route" size={24} />
+            <span>Schedule</span>
+          </h2>
+        </div>
+      )}
       {bookCount === 0 ? (
         <p class="reading-planner__empty">Add books to get started.</p>
       ) : noDaysWarning ? (

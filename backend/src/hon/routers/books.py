@@ -5,14 +5,16 @@ from time import monotonic
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import RedirectResponse
 
 from hon.models.book import SearchResult
 from hon.models.visuals import BookVisuals, VisualRequest
 from hon.services.book_visuals import get_visuals
 from hon.services.bookinfo import search as search_bookinfo
-from hon.services.catalog import folded, rank_books
+from hon.services.catalog import folded, isbn_value, rank_books
 from hon.services.google_books import search as search_google_books
 from hon.services.open_library import search as search_open_library
+from hon.services.publisher_cover import get_publisher_cover
 
 router = APIRouter(prefix="/books", tags=["books"])
 logger = logging.getLogger(__name__)
@@ -24,6 +26,17 @@ _cache: OrderedDict[str, tuple[float, SearchResult]] = OrderedDict()
 @router.post("/visuals", response_model=BookVisuals)
 async def book_visuals(book: VisualRequest) -> BookVisuals:
     return await get_visuals(book)
+
+
+@router.get("/cover")
+async def book_cover(isbn: str = Query(..., min_length=10, max_length=20)):
+    code = isbn_value(isbn)
+    if not code:
+        raise HTTPException(status_code=422, detail="Invalid ISBN")
+    url = await get_publisher_cover(code)
+    if not url:
+        raise HTTPException(status_code=404, detail="Cover unavailable", headers={"Cache-Control": "no-store"})
+    return RedirectResponse(url, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/search", response_model=SearchResult)

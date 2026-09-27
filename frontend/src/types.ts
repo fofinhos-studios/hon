@@ -36,6 +36,7 @@ export type SearchBook = Omit<Book, "page_count"> & {
 };
 
 export interface BookVisuals {
+  color_version?: number;
   dominant_color: string | null;
   artwork: {
     image_url: string;

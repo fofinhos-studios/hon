@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   calculatePagesPerDay,
   calculateSchedule,
@@ -19,29 +19,42 @@ export function useReadingPlanner(books: Book[]) {
   const [method, setMethod] = useState<ReadingMethod>("sequential");
   const [driver, setDriver] = useState<"pages" | "date">("pages");
   const today = todayISO();
+  // Visual enrichment replaces Book objects, but only order and page counts
+  // affect the plan. Keep that input stable while images and colors arrive.
+  const planKey = JSON.stringify(
+    books.map(({ id, page_count, pages_read }) => [id, page_count, pages_read]),
+  );
+  const planInput = useRef({ key: planKey, books });
+  if (planInput.current.key !== planKey)
+    planInput.current = { key: planKey, books };
+  const planBooks = planInput.current.books;
+  const schedule = useMemo(
+    () =>
+      planBooks.length > 0 && readingDays.length > 0 && pagesPerDay > 0
+        ? calculateSchedule(planBooks, readingDays, pagesPerDay, method, today)
+        : null,
+    [planBooks, readingDays, pagesPerDay, method, today],
+  );
 
   useEffect(() => {
-    if (books.length === 0 || readingDays.length === 0) {
+    if (planBooks.length === 0 || readingDays.length === 0) {
       setFinishDate("");
       return;
     }
     if (driver === "pages") {
-      setFinishDate(
-        calculateSchedule(books, readingDays, pagesPerDay, method, today)
-          .finish_date,
-      );
+      if (schedule) setFinishDate(schedule.finish_date);
       return;
     }
     if (!finishDate) return;
     const required = calculatePagesPerDay(
-      books,
+      planBooks,
       readingDays,
       today,
       finishDate,
       method,
     );
     if (required > 0) setPagesPerDay(required);
-  }, [books, readingDays, pagesPerDay, finishDate, method, driver, today]);
+  }, [planBooks, readingDays, finishDate, method, driver, today, schedule]);
 
   return {
     readingDays,
@@ -49,10 +62,7 @@ export function useReadingPlanner(books: Book[]) {
     finishDate,
     method,
     today,
-    schedule:
-      books.length > 0 && readingDays.length > 0 && pagesPerDay > 0
-        ? calculateSchedule(books, readingDays, pagesPerDay, method, today)
-        : null,
+    schedule,
     noDaysWarning: readingDays.length === 0,
     dateTooSoonWarning:
       driver === "date" && finishDate !== "" && finishDate < today,

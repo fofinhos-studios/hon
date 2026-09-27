@@ -5,7 +5,8 @@ Made with love by 🧡💜 fofinhos.studios
 **hon** is a calm reading planner that turns your book list into a schedule you can keep.
 
 - Find books by title or add them yourself.
-- Track your progress as you read.
+- Track your progress as you read and edit a book's page count.
+- Reorder books in the schedule, which opens as compact colored spines. Expand cards to see their covers.
 - Choose your reading days and either set a daily page goal or a finish date.
 - Read books one at a time or share your daily pages across several books.
 
@@ -25,9 +26,9 @@ Open `/?design-system=1` on the development server for the component gallery. Th
 
 ## Book visuals
 
-`POST /books/visuals` accepts `{ id, title, author, cover_url }` and returns `{ dominant_color, artwork }`. Both values can be null. An artwork includes `image_url`, `source_url`, `author`, and `license`. This optional endpoint runs after adding a book, independently of catalog search and scheduling.
+`POST /books/visuals` accepts `{ id, title, author, cover_url }` and returns `{ color_version, dominant_color, artwork }`. Color and artwork can be null. An artwork includes `image_url`, `source_url`, `author`, and `license`. This optional endpoint runs after adding a book, independently of catalog search and scheduling. Colors are averaged within the largest neighboring hue group, by pixel area, ignoring transparent and neutral pixels. Downloads are capped at 12 MiB and images at 16 million pixels. The color version lets saved books refresh after algorithm changes.
 
-The service extracts a useful color from bounded cover downloads and searches Wikimedia Commons for an explicit title/author match. It supports the cover-specific Internet Archive redirects used by Open Library. Results without attribution or a trustworthy match fall back to the cover in the frontend. Readers can hide a book's background; artwork credits remain available by keyboard when displayed.
+The service extracts a useful color from bounded cover downloads and searches Wikimedia Commons for an explicit title/author match. It supports the cover-specific Internet Archive redirects used by Open Library. Results without attribution or a trustworthy match fall back to the cover in the frontend. Artwork credits remain available by keyboard when displayed; legacy background preferences are preserved.
 
 No artwork API key or database is required. Set `HON_USER_AGENT` to an identifying application user agent with your deployment's contact information for Wikimedia requests. The backend keeps up to 256 cached results (24 hours for enriched results, one hour for empty results), deduplicates in-flight requests, and imposes an eight-second enrichment deadline. The frontend makes at most two requests at once, saves visuals and background preferences with existing local books, and retries stale partial results on a later visit. Network failures do not interrupt reading.
 
@@ -37,6 +38,6 @@ Search combines [Bookinfo](https://bookinfometadados.com.br/) publisher metadata
 
 `GET /books/search?q=...` searches across languages without a selector or language filter. Search folds case and accents, makes bounded broader/fuzzy queries for weak matches, ranks titles and authors, and merges only identical ISBNs. Text relevance comes first; Brazilian ISBNs break ties between equally relevant editions. Open Library combines an unrestricted search with a regional edition pass so Brazilian translations remain discoverable without excluding original editions. Results expose ISBN, publisher, publication date and language so readers can distinguish editions. An unknown page count stays null until the reader supplies it; a work-level median is never substituted for an edition's length.
 
-Catalog requests run concurrently under a 12-second deadline. The backend caches up to 128 normalized queries for five minutes (15 seconds for empty or partial results). Individual provider failures preserve other results and set `partial: true`. Exact edition covers use an ISBN-based fallback if the primary image fails. Existing locally saved books remain compatible; search metadata applies to newly added editions.
+Catalog requests run concurrently under a 12-second deadline. The backend caches up to 128 normalized queries for five minutes (15 seconds for empty or partial results). Individual provider failures preserve other results and set `partial: true`. Exact edition covers use an ISBN-based fallback if the primary image fails. If those images are missing, `GET /books/cover?isbn=...` can recover Record-group covers from the publisher's public catalog: it requires an exact ISBN in the front-cover metadata and a verified publisher asset URL. Successful lookups are cached for one hour (misses for one minute), with at most eight concurrent requests and a four-second deadline. This recovery also works for already-saved ISBN editions and never substitutes a different edition. Existing locally saved books remain compatible; search metadata applies to newly added editions.
 
 Optional background illustrations come from [Wikimedia Commons](https://commons.wikimedia.org/), with source and license attribution attached to each image.
