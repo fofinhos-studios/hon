@@ -15,7 +15,8 @@ def item(book_id: str = "gb-1", pages: object = 100, title: str = "Dune") -> dic
 
 def test_normalize_filters_malformed_items():
     assert normalize({"volumeInfo": {"title": "Missing ID", "pageCount": 10}}) is None
-    assert normalize(item(pages="many")) is None
+    book = normalize(item(pages="many"))
+    assert book is not None and book.page_count is None
     assert normalize(item(title="   ")) is None
     assert normalize({"volumeInfo": []}) is None
 
@@ -73,6 +74,7 @@ async def test_search_queries_once():
     assert [book.id for book in books] == ["dune"]
     assert client.get.call_count == 1
     assert client.get.call_args.kwargs["params"]["q"] == "dune"
+    assert "langRestrict" not in client.get.call_args.kwargs["params"]
 
 
 @pytest.mark.asyncio

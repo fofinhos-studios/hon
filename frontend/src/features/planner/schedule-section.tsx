@@ -1,6 +1,5 @@
-import { Route } from "lucide-preact";
+import { Icon } from "../../components/icon";
 import { ScheduleView } from "../../components/schedule-view";
-import { Tooltip } from "../../components/tooltip";
 import type { Book, ReadingMethod, ScheduleResult } from "../../types";
 
 interface Props {
@@ -24,11 +23,12 @@ export function ScheduleSection({
 }: Props) {
   return (
     <section class="reading-planner__section">
-      <p class="hon-section-title">
-        <Route size={14} aria-hidden="true" />
-        <span>Schedule</span>
-        <Tooltip content="Generated calendar from books, progress, pace, method, and reading days." />
-      </p>
+      <div class="hon-section-heading">
+        <h2>
+          <Icon name="route" size={24} />
+          <span>Schedule</span>
+        </h2>
+      </div>
       {bookCount === 0 ? (
         <p class="reading-planner__empty">Add books to get started.</p>
       ) : noDaysWarning ? (

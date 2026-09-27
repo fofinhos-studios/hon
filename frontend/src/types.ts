@@ -20,7 +20,29 @@ export interface Book {
   author: string;
   page_count: number;
   cover_url: string | null;
+  cover_fallback_url?: string | null;
+  isbn?: string | null;
+  language?: string | null;
+  publisher?: string | null;
+  published_date?: string | null;
   pages_read?: number;
+  visuals?: BookVisuals;
+  visuals_checked_at?: number;
+  background_hidden?: boolean;
+}
+
+export type SearchBook = Omit<Book, "page_count"> & {
+  page_count: number | null;
+};
+
+export interface BookVisuals {
+  dominant_color: string | null;
+  artwork: {
+    image_url: string;
+    source_url: string;
+    author: string;
+    license: string;
+  } | null;
 }
 
 export type ReadingMethod = "sequential" | "interleaved";

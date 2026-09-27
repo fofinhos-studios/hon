@@ -9,6 +9,7 @@ interface Props {
   onRemove: (id: string) => void;
   onReorder: (books: Book[]) => void;
   onUpdateProgress: (id: string, pagesRead: number | undefined) => void;
+  onToggleBackground?: (id: string) => void;
 }
 
 export function BookList({
@@ -16,6 +17,7 @@ export function BookList({
   onRemove,
   onReorder,
   onUpdateProgress,
+  onToggleBackground,
 }: Props) {
   const { dragState, getItemStyle, handlePointerDown, setItemRef } =
     useBookReorder(books, onReorder);
@@ -29,6 +31,17 @@ export function BookList({
           <BookCard
             key={book.id}
             book={book}
+            index={index}
+            last={index === books.length - 1}
+            onMove={(direction) => {
+              const next = [...books];
+              const [moved] = next.splice(index, 1);
+              next.splice(index + direction, 0, moved);
+              onReorder(next);
+            }}
+            onToggleBackground={
+              onToggleBackground ? () => onToggleBackground(book.id) : undefined
+            }
             isDragging={dragState?.bookId === book.id && dragState.activated}
             isDropTarget={
               dragState?.targetIndex === index &&

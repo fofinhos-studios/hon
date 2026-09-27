@@ -1,5 +1,5 @@
-import { CalendarDays } from "lucide-preact";
 import { DayPicker } from "../../components/day-picker";
+import { Icon } from "../../components/icon";
 import { Tooltip } from "../../components/tooltip";
 import type { DayOfWeek } from "../../types";
 
@@ -17,7 +17,7 @@ export function ReadingDaysControl({
   return (
     <section class="reading-planner__section">
       <p class="hon-section-title">
-        <CalendarDays size={14} aria-hidden="true" />
+        <Icon name="calendar" size={14} aria-hidden="true" />
         <span>Reading days</span>
         <Tooltip content="Pick reading days. Page targets apply only to selected days." />
       </p>

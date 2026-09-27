@@ -1,5 +1,4 @@
-import { Split } from "lucide-preact";
-import { Tooltip } from "../../components/tooltip";
+import { Icon } from "../../components/icon";
 import type { ReadingMethod } from "../../types";
 
 const METHODS: ReadingMethod[] = ["sequential", "interleaved"];
@@ -13,9 +12,8 @@ export function ReadingMethodControl({ method, onChange }: Props) {
   return (
     <section class="reading-planner__section">
       <p class="hon-section-title">
-        <Split size={14} aria-hidden="true" />
+        <Icon name="split" size={14} aria-hidden="true" />
         <span>Reading method</span>
-        <Tooltip content="Sequential finishes books in order. Interleaved shares daily pages across active books." />
       </p>
       <fieldset
         class="reading-planner__method-group"
@@ -35,8 +33,8 @@ export function ReadingMethodControl({ method, onChange }: Props) {
       </fieldset>
       <p class="reading-planner__method-help">
         {method === "sequential"
-          ? "Finish one book before starting the next. Your full daily page budget applies to the current book."
-          : "Split your daily page budget across all active books. Larger books get a bigger share so everything finishes around the same time."}
+          ? "One book at a time."
+          : "Daily pages split by each book’s remaining pages."}
       </p>
     </section>
   );

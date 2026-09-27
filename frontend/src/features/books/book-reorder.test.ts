@@ -73,8 +73,8 @@ describe("book reorder", () => {
     };
 
     expect(getBookReorderStyle(state, 0, "a")).toEqual({
-      transform: "translateY(140px) scale(1.018) rotate(2deg)",
-      zIndex: "3",
+      transform: "translateY(140px)",
+      zIndex: "var(--layer-drag)",
       transition: "none",
     });
     expect(getBookReorderStyle(state, 1, "b")).toEqual({

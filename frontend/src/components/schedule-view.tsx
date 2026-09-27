@@ -1,6 +1,9 @@
-import { GripVertical, Info } from "lucide-preact";
+import { BookCover } from "../features/books/book-art";
+import { bookVisualStyle } from "../features/books/book-visuals";
 import { useBookReorder } from "../hooks/use-book-reorder";
 import type { Book, ReadingMethod, ScheduleResult } from "../types";
+import { Icon } from "./icon";
+import { ReorderControls } from "./reorder-controls";
 
 interface Props {
   books: Book[];
@@ -34,12 +37,23 @@ export function ScheduleView({
   );
 
   return (
-    <div class="schedule-view">
+    <div class={`schedule-view schedule-view--${method}`}>
+      <div class="schedule-view__summary hon-mono">
+        <span>
+          {result.total_pages.toLocaleString()} pages ·{" "}
+          {result.total_reading_days} reading day
+          {result.total_reading_days === 1 ? "" : "s"} · {pagesPerDay}pp/day
+          {method === "interleaved" ? " shared total" : ""}
+        </span>
+        <span class="schedule-view__finish">
+          Finishes {formatDate(result.finish_date)}
+        </span>
+      </div>
+
       {method === "interleaved" && (
         <p class="schedule-view__note">
-          <Info size={14} aria-hidden="true" />
-          Shared budget: {pagesPerDay} total pages per reading day across all
-          active books, weighted by remaining pages.
+          <Icon name="info" size={14} aria-hidden="true" />
+          {pagesPerDay} pages/day shared across books.
         </p>
       )}
 
@@ -60,21 +74,18 @@ export function ScheduleView({
               ref={(element) => setItemRef(book.id, element)}
               data-book-id={book.id}
               class={`schedule-view__item${isDragging ? " schedule-view__item--dragging" : ""}${isDropTarget ? " schedule-view__item--drop-target" : ""}`}
-              style={getItemStyle(index, book.id)}
-              onPointerDown={(event) => handlePointerDown(book.id, event)}
+              style={{
+                ...bookVisualStyle(book),
+                ...getItemStyle(index, book.id),
+              }}
             >
-              <span class="schedule-view__drag-handle" aria-hidden="true">
-                <GripVertical size={16} aria-hidden="true" />
-              </span>
-              {book.cover_url && (
-                <img
-                  class="schedule-view__cover"
-                  src={book.cover_url}
-                  alt=""
-                  width={32}
-                  height={48}
-                />
-              )}
+              <div class="schedule-view__cover">
+                <BookCover book={book} />
+                <span class="schedule-view__station">
+                  <span class="sr-only">Position </span>
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+              </div>
               <div class="schedule-view__content">
                 <div class="schedule-view__book-info">
                   <span class="schedule-view__book-title">{book.title}</span>
@@ -86,13 +97,24 @@ export function ScheduleView({
                 </div>
                 <div class="schedule-view__dates hon-mono">
                   <span>{formatDate(start_date)}</span>
-                  <span class="schedule-view__arrow">→</span>
+                  <Icon name="arrowRight" size={16} />
                   <span>{formatDate(finish_date)}</span>
                 </div>
+                <ReorderControls
+                  title={book.title}
+                  first={index === 0}
+                  last={index === books.length - 1}
+                  onPointerDown={(event) => handlePointerDown(book.id, event)}
+                  onMove={(direction) => {
+                    const next = [...books];
+                    const [moved] = next.splice(index, 1);
+                    next.splice(index + direction, 0, moved);
+                    onReorder(next);
+                  }}
+                />
                 {method === "interleaved" && daily_pages ? (
                   <p class="schedule-view__detail hon-mono">
-                    Read about {daily_pages} pages per reading day while this
-                    book is active.
+                    About {daily_pages} pages/day
                   </p>
                 ) : null}
               </div>
@@ -100,18 +122,6 @@ export function ScheduleView({
           );
         })}
       </ul>
-
-      <div class="schedule-view__summary hon-mono">
-        <span>
-          {result.total_pages.toLocaleString()} pages ·{" "}
-          {result.total_reading_days} reading day
-          {result.total_reading_days === 1 ? "" : "s"} · {pagesPerDay}pp/day
-          {method === "interleaved" ? " shared total" : ""}
-        </span>
-        <span class="schedule-view__finish">
-          Finishes {formatDate(result.finish_date)}
-        </span>
-      </div>
     </div>
   );
 }

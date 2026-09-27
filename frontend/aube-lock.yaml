@@ -11,12 +11,12 @@ importers:
       '@babel/core':
         specifier: 7.x
         version: 7.29.0
+      '@phosphor-icons/core':
+        specifier: ^2.1.1
+        version: 2.1.1
       '@preact/preset-vite':
         specifier: ^2.10.5
         version: 2.10.5(@babel/core@7.29.0)(vite@8.0.3(@types/node@25.5.0)(jiti@2.6.1))
-      lucide-preact:
-        specifier: ^1.7.0
-        version: 1.7.0(preact@10.29.0)
       preact:
         specifier: ^10.29.0
         version: 10.29.0
@@ -217,6 +217,9 @@ packages:
 
   '@oxc-project/types@0.122.0':
     resolution: {integrity: sha512-oLAl5kBpV4w69UtFZ9xqcmTi+GENWOcPF7FCrczTiBbmC0ibXxCwyvZGbO39rCVEuLGAZM84DH0pUIyyv/YJzA==}
+
+  '@phosphor-icons/core@2.1.1':
+    resolution: {integrity: sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ==}
 
   '@preact/preset-vite@2.10.5':
     resolution: {integrity: sha512-p0vJpxiVO7KWWazWny3LUZ+saXyZKWv6Ju0bYMWNJRp2YveufRPgSUB1C4MTqGJfz07EehMgfN+AJNwQy+w6Iw==}
@@ -813,11 +816,6 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-preact@1.7.0:
-    resolution: {integrity: sha512-gv743hfkCH2MeUmZQ9g4+Yd+/zZyAOLuXvxWo6CUY6kMrnnoDZnnwpSZqWsEveCC9LNp+NgHkeTfztObIue+SA==}
-    peerDependencies:
-      preact: ^10.27.2
-
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
@@ -1312,6 +1310,8 @@ snapshots:
     optional: true
 
   '@oxc-project/types@0.122.0': {}
+
+  '@phosphor-icons/core@2.1.1': {}
 
   '@preact/preset-vite@2.10.5(@babel/core@7.29.0)(vite@8.0.3(@types/node@25.5.0)(jiti@2.6.1))':
     dependencies:
@@ -1985,10 +1985,6 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
-
-  lucide-preact@1.7.0(preact@10.29.0):
-    dependencies:
-      preact: 10.29.0
 
   lz-string@1.5.0: {}
 

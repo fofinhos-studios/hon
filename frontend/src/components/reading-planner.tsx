@@ -5,36 +5,43 @@ import { ScheduleSection } from "../features/planner/schedule-section";
 import { useReadingPlanner } from "../features/planner/use-reading-planner";
 import type { Book } from "../types";
 
-interface Props {
-  books: Book[];
-  onReorder: (books: Book[]) => void;
-}
-
-export function ReadingPlanner({ books, onReorder }: Props) {
-  const planner = useReadingPlanner(books);
+export function PlannerControls({
+  planner,
+  bookCount,
+}: { planner: ReturnType<typeof useReadingPlanner>; bookCount: number }) {
   return (
-    <div class="reading-planner">
+    <div class="reading-planner__controls">
       <ReadingDaysControl
         readingDays={planner.readingDays}
         onChange={planner.setReadingDays}
         showWarning={planner.noDaysWarning}
       />
-      <hr class="hon-divider" />
       <ReadingTargetControl
         pagesPerDay={planner.pagesPerDay}
         finishDate={planner.finishDate}
         today={planner.today}
-        disabled={planner.noDaysWarning || books.length === 0}
+        disabled={planner.noDaysWarning || bookCount === 0}
         dateTooSoon={planner.dateTooSoonWarning}
         onPagesChange={planner.setPagesPerDay}
         onDateChange={planner.setFinishDate}
       />
-      <hr class="hon-divider" />
       <ReadingMethodControl
         method={planner.method}
         onChange={planner.setMethod}
       />
-      <hr class="hon-divider" />
+    </div>
+  );
+}
+
+// Standalone composition retained for embedded use and existing behavior tests.
+export function ReadingPlanner({
+  books,
+  onReorder,
+}: { books: Book[]; onReorder: (books: Book[]) => void }) {
+  const planner = useReadingPlanner(books);
+  return (
+    <div class="reading-planner">
+      <PlannerControls planner={planner} bookCount={books.length} />
       <ScheduleSection
         books={books}
         bookCount={books.length}

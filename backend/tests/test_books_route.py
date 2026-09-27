@@ -1,97 +1,91 @@
 import asyncio
-import logging
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from hon.models.book import BookResult
+from hon.routers.books import _cache
 
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
 
 
+@pytest.fixture(autouse=True)
+def catalogs():
+    _cache.clear()
+    with (
+        patch("hon.routers.books.search_google_books", AsyncMock(return_value=[])) as google,
+        patch("hon.routers.books.search_open_library", AsyncMock(return_value=[])) as library,
+        patch("hon.routers.books.search_bookinfo", AsyncMock(return_value=[])) as bookinfo,
+    ):
+        yield google, library, bookinfo
+    _cache.clear()
+
+
 def test_health_reports_service_status(client: TestClient):
-    response = client.get("/health")
+    assert client.get("/health").json() == {"status": "ok"}
 
+
+def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient, catalogs):
+    google, library, bookinfo = catalogs
+    google.return_value = [BOOK]
+    bookinfo.return_value = [BOOK.model_copy(update={"id": "2", "publisher": "Other edition"})]
+    response = client.get("/books/search?q=dune")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["source"] == "combined"
+    assert len(response.json()["books"]) == 2
+    library.assert_awaited_once_with("dune")
 
 
-def test_search_returns_google_books_results(client: TestClient):
-    with (
-        patch("hon.routers.books.search_google_books", AsyncMock(return_value=[BOOK])),
-        patch("hon.routers.books.search_open_library", AsyncMock()) as fallback,
-    ):
-        response = client.get("/books/search?q=dune")
-    assert response.status_code == 200
-    assert response.json()["source"] == "google_books"
-    fallback.assert_not_awaited()
-
-
-def test_search_falls_back_to_open_library(client: TestClient):
-    with (
-        patch("hon.routers.books.search_google_books", AsyncMock(side_effect=httpx.DecodingError("bad"))),
-        patch("hon.routers.books.search_open_library", AsyncMock(return_value=[BOOK])),
-    ):
-        response = client.get("/books/search?q=dune")
+def test_search_survives_a_provider_failure(client: TestClient, catalogs):
+    google, library, _ = catalogs
+    google.side_effect = httpx.DecodingError("bad")
+    library.return_value = [BOOK]
+    response = client.get("/books/search?q=dune")
     assert response.status_code == 200
     assert response.json()["source"] == "open_library"
 
 
-def test_search_maps_open_library_timeout(client: TestClient):
-    with (
-        patch("hon.routers.books.search_google_books", AsyncMock(return_value=[])),
-        patch("hon.routers.books.search_open_library", AsyncMock(side_effect=httpx.ReadTimeout("timeout"))),
-    ):
-        response = client.get("/books/search?q=dune")
-    assert response.status_code == 504
-
-
-def test_search_maps_open_library_failure(client: TestClient):
-    with (
-        patch("hon.routers.books.search_google_books", AsyncMock(return_value=[])),
-        patch("hon.routers.books.search_open_library", AsyncMock(side_effect=httpx.ConnectError("failure"))),
-    ):
-        response = client.get("/books/search?q=dune")
-    assert response.status_code == 502
+@pytest.mark.parametrize(("error", "status"), [(httpx.ReadTimeout("timeout"), 504), (httpx.ConnectError("bad"), 502)])
+def test_search_maps_outages(client: TestClient, catalogs, error, status):
+    catalogs[1].side_effect = error
+    assert client.get("/books/search?q=dune").status_code == status
 
 
 def test_search_validates_query(client: TestClient):
-    assert client.get("/books/search").status_code == 422
-    assert client.get("/books/search?q=lo").status_code == 422
-    assert client.get("/books/search?q=+++").status_code == 422
-    assert client.get(f"/books/search?q={'a' * 201}").status_code == 422
+    for params in ({}, {"q": "lo"}, {"q": "   "}, {"q": "..."}, {"q": "a" * 201}):
+        assert client.get("/books/search", params=params).status_code == 422
 
 
-def test_search_strips_query_before_calling_provider(client: TestClient):
-    google = AsyncMock(return_value=[BOOK])
-    with patch("hon.routers.books.search_google_books", google):
-        response = client.get("/books/search", params={"q": "  dune  "})
-
-    assert response.status_code == 200
-    google.assert_awaited_once_with("dune")
+def test_search_strips_query(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK]
+    assert client.get("/books/search", params={"q": "  dune  "}).status_code == 200
+    catalogs[0].assert_awaited_once_with("dune")
 
 
-def test_search_logs_google_failure_before_fallback(client: TestClient, caplog):
-    with (
-        caplog.at_level(logging.WARNING, logger="hon.routers.books"),
-        patch("hon.routers.books.search_google_books", AsyncMock(side_effect=httpx.ConnectError("failure"))),
-        patch("hon.routers.books.search_open_library", AsyncMock(return_value=[BOOK])),
-    ):
-        response = client.get("/books/search?q=dune")
+def test_search_cache_ignores_accents_and_case(client: TestClient, catalogs):
+    book = BOOK.model_copy(update={"title": "Café", "language": "pt"})
+    catalogs[2].return_value = [book]
+    client.get("/books/search", params={"q": "café"})
+    client.get("/books/search", params={"q": "CAFE"})
+    assert catalogs[2].await_count == 1
+    response = client.get("/books/search", params={"q": "cafe"})
+    assert catalogs[2].await_count == 1
+    assert response.json()["books"][0]["title"] == "Café"
 
-    assert response.status_code == 200
-    assert "Google Books search failed; falling back" in caplog.text
+
+def test_search_has_no_implicit_language_filter(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK.model_copy(update={"id": "en", "language": "en"})]
+    catalogs[2].return_value = [BOOK.model_copy(update={"id": "pt", "language": "pt"})]
+    response = client.get("/books/search", params={"q": "dune"})
+    assert {b["language"] for b in response.json()["books"]} == {"en", "pt"}
 
 
-def test_search_enforces_total_deadline(client: TestClient):
-    async def slow_search(_query: str):
+def test_search_enforces_total_deadline(client: TestClient, catalogs):
+    async def slow_search(*_args):
         await asyncio.sleep(1)
 
-    with (
-        patch("hon.routers.books.SEARCH_DEADLINE_SECONDS", 0.01),
-        patch("hon.routers.books.search_google_books", side_effect=slow_search),
-    ):
-        response = client.get("/books/search?q=dune")
-
-    assert response.status_code == 504
+    catalogs[0].side_effect = slow_search
+    with patch("hon.routers.books.SEARCH_DEADLINE_SECONDS", 0.01):
+        assert client.get("/books/search?q=dune").status_code == 504

@@ -74,7 +74,9 @@ describe("ScheduleView", () => {
       configurable: true,
     });
 
-    first.dispatchEvent(
+    const handle = first.querySelector(".reorder-handle");
+    if (!handle) throw new Error("Expected drag handle");
+    handle.dispatchEvent(
       new PointerEvent("pointerdown", {
         bubbles: true,
         pointerId: 1,
@@ -105,4 +107,34 @@ describe("ScheduleView", () => {
       ).map((item) => item.textContent),
     ).toEqual(["Second Book", "First Book"]);
   });
+});
+
+test("shows the edition cover and an accessible placeholder in the schedule", () => {
+  const books = [
+    {
+      ...initialBooks[0],
+      cover_url: "https://covers.openlibrary.org/edition.jpg",
+    },
+    initialBooks[1],
+  ];
+  const result = calculateSchedule(
+    books,
+    [0, 1, 2, 3, 4],
+    30,
+    "sequential",
+    "2026-01-05",
+  );
+  const view = render(
+    <ScheduleView
+      books={books}
+      result={result}
+      pagesPerDay={30}
+      method="sequential"
+      onReorder={() => {}}
+    />,
+  );
+  expect(
+    view.getByAltText("Cover of First Book").getAttribute("src"),
+  ).toContain("edition.jpg");
+  expect(view.getByLabelText("No cover for Second Book")).toBeTruthy();
 });

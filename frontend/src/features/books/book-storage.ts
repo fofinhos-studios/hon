@@ -1,4 +1,4 @@
-import type { Book } from "../../types";
+import type { Book, BookVisuals } from "../../types";
 
 const STORAGE_KEY = "hon.books";
 
@@ -20,6 +20,24 @@ function isBook(value: unknown): value is Book {
   );
 }
 
+function validVisuals(value: unknown): value is BookVisuals {
+  if (!value || typeof value !== "object") return false;
+  const visuals = value as Partial<BookVisuals>;
+  const art = visuals.artwork;
+  return (
+    (visuals.dominant_color === null ||
+      (typeof visuals.dominant_color === "string" &&
+        /^#[0-9a-f]{6}$/i.test(visuals.dominant_color))) &&
+    (art === null ||
+      (!!art &&
+        typeof art === "object" &&
+        typeof art.image_url === "string" &&
+        typeof art.source_url === "string" &&
+        typeof art.author === "string" &&
+        typeof art.license === "string"))
+  );
+}
+
 export function loadBooks(storage: StorageAdapter): Book[] {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -33,12 +51,32 @@ export function loadBooks(storage: StorageAdapter): Book[] {
           Array.isArray(value.books)
         ? value.books
         : [];
-    return books.every(isBook) ? books : [];
+    return books.every(isBook)
+      ? books.map((book) => {
+          const { visuals, visuals_checked_at, background_hidden, ...rest } =
+            book;
+          return {
+            ...rest,
+            ...(validVisuals(visuals) ? { visuals } : {}),
+            ...(typeof visuals_checked_at === "number" &&
+            Number.isFinite(visuals_checked_at)
+              ? { visuals_checked_at }
+              : {}),
+            ...(typeof background_hidden === "boolean"
+              ? { background_hidden }
+              : {}),
+          };
+        })
+      : [];
   } catch {
     return [];
   }
 }
 
 export function saveBooks(storage: StorageAdapter, books: Book[]): void {
-  storage.setItem(STORAGE_KEY, JSON.stringify(books));
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(books));
+  } catch {
+    /* A full or disabled store must not break the current reading session. */
+  }
 }

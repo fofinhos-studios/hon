@@ -69,6 +69,7 @@ export function useBookReorder(
     const handlePointerEnd = (endEvent: PointerEvent) => {
       if (endEvent.pointerId !== currentState.pointerId) return;
       if (
+        endEvent.type !== "pointercancel" &&
         currentState.activated &&
         currentState.targetIndex !== currentState.originIndex
       ) {

@@ -1,54 +1,57 @@
-import type { Book } from "../../types";
+import type { SearchBook } from "../../types";
+import { BookCover } from "./book-art";
 
 interface Props {
-  results: Book[];
-  usingFallback: boolean;
-  onSelect: (book: Book) => void;
+  results: SearchBook[];
+  onSelect: (book: SearchBook) => void;
 }
 
-export function BookSearchResults({ results, usingFallback, onSelect }: Props) {
-  if (results.length === 0) return null;
+const LANGUAGES: Record<string, string> = {
+  pt: "Português",
+  en: "English",
+  es: "Español",
+  fr: "Français",
+  de: "Deutsch",
+};
 
+export function BookSearchResults({ results, onSelect }: Props) {
+  if (results.length === 0) return null;
   return (
-    <>
-      <ul
-        class="book-search__results book-search__results--visible"
-        id="book-search-results"
-      >
-        {results.map((book, index) => (
-          <li
-            key={book.id}
-            class={`book-search__result-item book-search__result-item--${Math.min(index, 5)}`}
+    <ul class="book-search__results" id="book-search-results">
+      {results.map((book) => (
+        <li key={book.id} class="book-search__result-item">
+          <button
+            type="button"
+            class="book-search__result"
+            onClick={() => onSelect(book)}
           >
-            <button
-              type="button"
-              class="book-search__result"
-              onClick={() => onSelect(book)}
-            >
-              {book.cover_url && (
-                <img
-                  class="book-search__cover"
-                  src={book.cover_url}
-                  alt=""
-                  width={32}
-                  height={48}
-                />
-              )}
-              <div class="book-search__result-info">
-                <span class="book-search__result-title">{book.title}</span>
+            <BookCover book={book} />
+            <span class="book-search__result-info">
+              <span class="book-search__result-title">{book.title}</span>
+              <span class="book-search__result-meta">{book.author}</span>
+              <span class="book-search__result-meta">
+                {[
+                  book.language
+                    ? LANGUAGES[book.language] || book.language
+                    : null,
+                  book.publisher,
+                  book.published_date,
+                  book.page_count
+                    ? `${book.page_count} pp`
+                    : "Pages not listed",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              {book.isbn && (
                 <span class="book-search__result-meta hon-mono">
-                  {book.author} · {book.page_count}pp
+                  ISBN {book.isbn}
                 </span>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {usingFallback && (
-        <p class="book-search__fallback-note hon-mono">
-          Results via OpenLibrary
-        </p>
-      )}
-    </>
+              )}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

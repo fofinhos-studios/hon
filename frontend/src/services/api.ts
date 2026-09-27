@@ -1,6 +1,25 @@
-import type { Book } from "../types";
+import type { Book, BookVisuals, SearchBook } from "../types";
 
 const API_BASE = "/api";
+
+export async function fetchBookVisuals(
+  book: Book,
+  signal: AbortSignal,
+): Promise<BookVisuals> {
+  const response = await fetch(`${API_BASE}/books/visuals`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      cover_url: book.cover_url,
+    }),
+  });
+  if (!response.ok) throw new Error("Book visuals unavailable");
+  return response.json() as Promise<BookVisuals>;
+}
 
 async function parseError(
   response: Response,
@@ -16,8 +35,9 @@ async function parseError(
 }
 
 export interface SearchResult {
-  books: Book[];
-  source: "google_books" | "open_library";
+  books: SearchBook[];
+  source: "google_books" | "open_library" | "bookinfo" | "combined";
+  partial?: boolean;
 }
 
 export async function searchBooks(

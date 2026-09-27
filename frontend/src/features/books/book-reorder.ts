@@ -77,8 +77,8 @@ export function getBookReorderStyle(
     dragState.slots[dragState.originIndex].height + dragState.itemGap;
   if (dragState.bookId === bookId) {
     return {
-      transform: `translateY(${deltaY}px) scale(1.018) rotate(${Math.max(-2, Math.min(2, deltaY / 18))}deg)`,
-      zIndex: "3",
+      transform: `translateY(${deltaY}px)`,
+      zIndex: "var(--layer-drag)",
       transition: "none",
     };
   }

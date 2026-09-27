@@ -57,7 +57,9 @@ describe("ReadingPlanner", () => {
     ) as HTMLInputElement;
     if (!finishInput || !pagesInput) throw new Error("Expected planner inputs");
 
-    fireEvent.input(finishInput, { target: { value: todayISO() } });
+    // A same-day deadline is impossible on weekends with the default weekdays.
+    const firstReadingDay = addReadingDays(todayISO(), [0, 1, 2, 3, 4], 1);
+    fireEvent.input(finishInput, { target: { value: firstReadingDay } });
 
     expect(pagesInput.value).toBe("1000");
     expect(slider.max).toBe("1000");

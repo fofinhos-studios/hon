@@ -25,8 +25,8 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
+    "@phosphor-icons/core": "^2.1.1",
     "@preact/preset-vite": "^2.10.5",
-    "lucide-preact": "^1.7.0",
     "preact": "^10.29.0"
   }
 }

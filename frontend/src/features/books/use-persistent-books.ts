@@ -1,5 +1,5 @@
-import { useEffect, useState } from "preact/hooks";
-import type { Book } from "../../types";
+import { useCallback, useEffect, useState } from "preact/hooks";
+import type { Book, BookVisuals } from "../../types";
 import { loadBooks, saveBooks } from "./book-storage";
 
 export function usePersistentBooks() {
@@ -7,8 +7,27 @@ export function usePersistentBooks() {
 
   useEffect(() => saveBooks(localStorage, books), [books]);
 
+  const updateVisuals = useCallback((id: string, visuals: BookVisuals) => {
+    setBooks((current) =>
+      current.map((book) =>
+        book.id === id
+          ? { ...book, visuals, visuals_checked_at: Date.now() }
+          : book,
+      ),
+    );
+  }, []);
+
   return {
     books,
+    updateVisuals,
+    toggleBackground: (id: string) =>
+      setBooks((current) =>
+        current.map((book) =>
+          book.id === id
+            ? { ...book, background_hidden: !book.background_hidden }
+            : book,
+        ),
+      ),
     addBook: (book: Book) =>
       setBooks((current) =>
         current.some((candidate) => candidate.id === book.id)

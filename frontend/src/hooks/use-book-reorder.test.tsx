@@ -60,6 +60,26 @@ function setBookRects(view: ReturnType<typeof render>) {
 }
 
 describe("useBookReorder", () => {
+  test("cancelling a drag does not commit its tentative order", () => {
+    const onReorder = vi.fn();
+    const view = render(<ReorderHarness onReorder={onReorder} />);
+    const { first } = setBookRects(view);
+    first.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 1,
+        button: 0,
+        clientY: 50,
+      }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { pointerId: 1, clientY: 190 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointercancel", { pointerId: 1, clientY: 190 }),
+    );
+    expect(onReorder).not.toHaveBeenCalled();
+  });
   test("reorders books after dragging across another slot", async () => {
     const onReorder = vi.fn((_books: Book[]) => {});
     const view = render(<ReorderHarness onReorder={onReorder} />);

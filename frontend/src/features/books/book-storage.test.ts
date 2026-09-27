@@ -14,6 +14,24 @@ const books: Book[] = [
 ];
 
 describe("book storage", () => {
+  test("keeps visual preferences and drops malformed decoration without losing books", () => {
+    const book = {
+      ...books[0],
+      background_hidden: true,
+      visuals: { dominant_color: "#123456", artwork: null },
+    };
+    const adapter = {
+      getItem: () => JSON.stringify([book]),
+      setItem: () => {},
+    };
+    expect(loadBooks(adapter)).toEqual([book]);
+    adapter.getItem = () =>
+      JSON.stringify([{ ...book, visuals: { dominant_color: "bad" } }]);
+    const [restored] = loadBooks(adapter);
+    expect(restored.title).toBe(book.title);
+    expect(restored.background_hidden).toBe(true);
+    expect(restored.visuals).toBeUndefined();
+  });
   test("round trips book data", () => {
     const storage = new Map<string, string>();
     const adapter = {

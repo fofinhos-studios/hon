@@ -24,4 +24,4 @@ def test_book_result_rejects_invalid_contract_values(field: str, value: object):
     values[field] = value
 
     with pytest.raises(ValidationError):
-        BookResult(**values)
+        BookResult.model_validate(values)

@@ -25,6 +25,26 @@ const books: Book[] = [
 ];
 
 describe("BookList", () => {
+  test("offers keyboard-operable ordering without changing book identity", () => {
+    const onReorder = vi.fn();
+    const view = render(
+      <BookList
+        books={books}
+        onRemove={() => {}}
+        onReorder={onReorder}
+        onUpdateProgress={() => {}}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Move First Book down" }));
+    expect(onReorder).toHaveBeenCalledWith([books[1], books[0]]);
+    expect(
+      view
+        .getByRole("button", {
+          name: "Move First Book up",
+        })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
   test("renders empty state and summary", () => {
     const empty = render(
       <BookList
@@ -34,9 +54,7 @@ describe("BookList", () => {
         onUpdateProgress={() => {}}
       />,
     );
-    expect(
-      empty.getByText("Search or enter a book above to add it to your list."),
-    ).toBeTruthy();
+    expect(empty.getByText("Your library is empty.")).toBeTruthy();
     empty.unmount();
 
     const populated = render(

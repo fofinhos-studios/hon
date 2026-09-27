@@ -10,5 +10,5 @@ test("renders the reading planner home page", () => {
   const view = render(<App />);
 
   expect(view.getByText("reading planner")).toBeTruthy();
-  expect(view.getByText("Your books")).toBeTruthy();
+  expect(view.getByRole("heading", { name: "Your books" })).toBeTruthy();
 });
