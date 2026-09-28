@@ -13,6 +13,7 @@ import grip from "@phosphor-icons/core/assets/regular/dots-six-vertical.svg?raw"
 import eyeSlash from "@phosphor-icons/core/assets/regular/eye-slash.svg?raw";
 import eye from "@phosphor-icons/core/assets/regular/eye.svg?raw";
 import split from "@phosphor-icons/core/assets/regular/git-fork.svg?raw";
+import github from "@phosphor-icons/core/assets/regular/github-logo.svg?raw";
 import info from "@phosphor-icons/core/assets/regular/info.svg?raw";
 import search from "@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw";
 import route from "@phosphor-icons/core/assets/regular/path.svg?raw";
@@ -35,6 +36,7 @@ const icons = {
   eyeSlash,
   expand,
   grip,
+  github,
   help,
   info,
   plus,

@@ -79,6 +79,13 @@ export function App() {
           Made with love by 🧡💜{" "}
           <a href="https://fofinhos.studio/">fofinhos.studio</a>
         </span>
+        <a
+          class="hon-footer__github"
+          href="https://github.com/fofinhos-studios/hon"
+          aria-label="View hon on GitHub"
+        >
+          <Icon name="github" size={20} />
+        </a>
       </footer>
     </div>
   );
