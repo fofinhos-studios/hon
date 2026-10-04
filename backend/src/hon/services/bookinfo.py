@@ -1,5 +1,6 @@
 """Brazilian edition metadata and publisher-supplied covers from Bookinfo."""
 
+import asyncio
 from contextlib import suppress
 
 import httpx
@@ -76,4 +77,22 @@ async def search(query: str) -> list[BookResult]:
             if term != folded(query):
                 with suppress(httpx.HTTPError):
                     books.extend(await lookup(term))
+            if not any(relevance(query, book) >= 0.85 for book in books):
+                # Bookinfo's title endpoint is substring-based, so query trigrams
+                # of the two longest words to retrieve nearby spellings.
+                fragments = dict.fromkeys(
+                    term[index : index + 3]
+                    for term in terms[:2]
+                    if len(term) >= 6
+                    for index in range(len(term) - 2)
+                )
+                if not fragments:
+                    return books
+                results = await asyncio.gather(*(lookup(fragment) for fragment in fragments), return_exceptions=True)
+                for result in results:
+                    if isinstance(result, httpx.HTTPError):
+                        continue
+                    if isinstance(result, BaseException):
+                        raise result
+                    books.extend(result)
         return books
