@@ -3,6 +3,7 @@ import { BookBackdrop, BookCover } from "../features/books/book-art";
 import { bookVisualStyle } from "../features/books/book-visuals";
 import { goodreadsBookUrl } from "../features/books/goodreads-link";
 import { useBookReorder } from "../hooks/use-book-reorder";
+import { useLanguage } from "../i18n";
 import type { Book, ReadingMethod, ScheduleResult } from "../types";
 import { Icon } from "./icon";
 import { ReorderControls } from "./reorder-controls";
@@ -15,16 +16,6 @@ interface Props {
   onReorder: (books: Book[]) => void;
 }
 
-function formatDate(iso: string, compact = false): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: compact ? undefined : "numeric",
-    timeZone: "UTC",
-  });
-}
-
 export function ScheduleView({
   books,
   result,
@@ -32,6 +23,7 @@ export function ScheduleView({
   method,
   onReorder,
 }: Props) {
+  const { copy, date: formatDate, number, author } = useLanguage();
   const [collapsed, setCollapsed] = useState(true);
   const { dragState, getItemStyle, handlePointerDown, setItemRef } =
     useBookReorder(books, onReorder);
@@ -46,7 +38,7 @@ export function ScheduleView({
       <div class="hon-section-heading">
         <h2>
           <Icon name="route" size={24} />
-          <span>Schedule</span>
+          <span>{copy.schedule}</span>
         </h2>
         <button
           type="button"
@@ -56,32 +48,32 @@ export function ScheduleView({
           onClick={() => setCollapsed((value) => !value)}
         >
           <Icon name={collapsed ? "expand" : "collapse"} size={16} />
-          {collapsed ? "Expand cards" : "Collapse cards"}
+          {collapsed ? copy.planner.expand : copy.planner.collapse}
         </button>
       </div>
       <div class="schedule-view__summary hon-mono">
         <span class="schedule-view__finish">
-          Finishes {formatDate(result.finish_date)}
+          {copy.planner.finishes(formatDate(result.finish_date))}
         </span>
         <span class="schedule-view__totals">
-          {books.length} book{books.length === 1 ? "" : "s"} ·{" "}
-          {result.total_pages.toLocaleString()} pages ·{" "}
-          {result.total_reading_days} reading day
-          {result.total_reading_days === 1 ? "" : "s"} · {pagesPerDay}pp/day
+          {copy.planner.bookCount(books.length)} ·{" "}
+          {copy.planner.pageCount(number(result.total_pages))} ·{" "}
+          {copy.planner.dayCount(result.total_reading_days)} ·{" "}
+          {copy.planner.dailyPace(number(pagesPerDay))}
         </span>
       </div>
 
       {method === "interleaved" && (
         <p class="schedule-view__note">
           <Icon name="info" size={14} aria-hidden="true" />
-          {pagesPerDay} pages/day shared across books.
+          {copy.planner.sharedPace(number(pagesPerDay))}
         </p>
       )}
 
       <ul
         class="schedule-view__list"
         id="schedule-cards"
-        aria-label="Reorder your schedule"
+        aria-label={copy.planner.reorder}
       >
         {books.flatMap((book, index) => {
           const schedule = schedulesByBookId.get(book.id);
@@ -111,12 +103,12 @@ export function ScheduleView({
               {collapsed ? (
                 <span
                   class="reorder-handle schedule-view__spine-handle"
-                  title="Drag to reorder"
+                  title={copy.planner.drag}
                   onPointerDown={(event) => handlePointerDown(book.id, event)}
                 >
                   <Icon name="grip" size={20} aria-hidden="true" />
                   <span class="schedule-view__spine-number hon-mono">
-                    <span class="sr-only">Position </span>
+                    <span class="sr-only">{copy.books.position} </span>
                     {index + 1}
                   </span>
                 </span>
@@ -124,7 +116,7 @@ export function ScheduleView({
                 <div class="schedule-view__expanded-media">
                   <span
                     class="reorder-handle"
-                    title="Drag to reorder"
+                    title={copy.planner.drag}
                     onPointerDown={(event) => handlePointerDown(book.id, event)}
                   >
                     <Icon name="grip" />
@@ -135,12 +127,12 @@ export function ScheduleView({
                       href={goodreadsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+                      aria-label={copy.books.goodreads(book.title)}
                     >
                       <BookCover book={book} priority={imagePriority} />
                     </a>
                     <span class="schedule-view__station">
-                      <span class="sr-only">Position </span>
+                      <span class="sr-only">{copy.books.position} </span>
                       {index + 1}
                     </span>
                   </div>
@@ -153,21 +145,23 @@ export function ScheduleView({
                     href={goodreadsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+                    aria-label={copy.books.goodreads(book.title)}
                     title={
                       collapsed
-                        ? `${book.title} — ${book.author} · View on Goodreads`
-                        : "View on Goodreads"
+                        ? `${book.title} — ${author(book.author)} · ${copy.books.goodreadsTitle}`
+                        : copy.books.goodreadsTitle
                     }
                   >
                     {book.title}
                   </a>
-                  {collapsed && <span class="sr-only">{book.author}</span>}
+                  {collapsed && (
+                    <span class="sr-only">{author(book.author)}</span>
+                  )}
                   {!collapsed && (
                     <span class="schedule-view__book-pages hon-mono">
                       {book.pages_read && book.pages_read > 0
-                        ? `${book.pages_read.toLocaleString()} / ${book.page_count.toLocaleString()} pp`
-                        : `${book.page_count.toLocaleString()} pp`}
+                        ? `${number(book.pages_read)} / ${copy.books.shortPages(number(book.page_count))}`
+                        : copy.books.shortPages(number(book.page_count))}
                     </span>
                   )}
                 </div>
@@ -181,10 +175,8 @@ export function ScheduleView({
                   {collapsed ? (
                     <>
                       <span class="schedule-view__book-pages">
-                        {book.pages_read
-                          ? `${book.pages_read.toLocaleString()} / `
-                          : ""}
-                        {book.page_count.toLocaleString()} pp
+                        {book.pages_read ? `${number(book.pages_read)} / ` : ""}
+                        {copy.books.shortPages(number(book.page_count))}
                       </span>
                       <span aria-hidden="true">•</span>
                       <span
@@ -192,7 +184,8 @@ export function ScheduleView({
                         title={`${formatDate(start_date)} → ${formatDate(finish_date)}`}
                       >
                         <span class="sr-only">
-                          {formatDate(start_date)} to {formatDate(finish_date)}
+                          {formatDate(start_date)} {copy.planner.dateTo}{" "}
+                          {formatDate(finish_date)}
                         </span>
                         <span aria-hidden="true">
                           {formatDate(start_date, true)} →{" "}
@@ -229,7 +222,7 @@ export function ScheduleView({
                         : "schedule-view__detail hon-mono"
                     }
                   >
-                    About {daily_pages} pages/day
+                    {copy.planner.aboutPace(number(daily_pages))}
                   </p>
                 ) : null}
               </div>

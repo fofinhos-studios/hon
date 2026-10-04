@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { searchBooks } from "../../services/api";
+import { SearchApiError, searchBooks } from "../../services/api";
 import type { SearchBook } from "../../types";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
+export type SearchErrorCode = "invalid" | "timeout" | "unavailable" | "unknown";
 
 export function useBookSearch(search = searchBooks) {
   const [query, setQueryState] = useState("");
@@ -12,6 +13,7 @@ export function useBookSearch(search = searchBooks) {
   const [searched, setSearched] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState<SearchErrorCode>("unknown");
   const [usingFallback, setUsingFallback] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -35,6 +37,7 @@ export function useBookSearch(search = searchBooks) {
     setSearched(false);
     setPartial(false);
     setError("");
+    setErrorCode("unknown");
     setUsingFallback(false);
   }, [cancelCurrentSearch]);
 
@@ -47,6 +50,7 @@ export function useBookSearch(search = searchBooks) {
       setSearched(false);
       setPartial(false);
       setError("");
+      setErrorCode("unknown");
       setUsingFallback(false);
       if (trimmed.length < MIN_QUERY_LENGTH) {
         setLoading(false);
@@ -77,6 +81,11 @@ export function useBookSearch(search = searchBooks) {
               ? searchError.message
               : "Search failed",
           );
+          setErrorCode(
+            searchError instanceof SearchApiError
+              ? searchError.code
+              : "unknown",
+          );
           setResults([]);
         } finally {
           if (controllerRef.current === controller)
@@ -99,6 +108,7 @@ export function useBookSearch(search = searchBooks) {
     searched,
     partial,
     error,
+    errorCode,
     usingFallback,
     setQuery,
     reset,

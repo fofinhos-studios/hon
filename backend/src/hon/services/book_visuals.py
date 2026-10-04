@@ -237,14 +237,17 @@ async def _enrich(book: VisualRequest) -> BookVisuals:
     ) as client:
 
         async def color():
-            if not book.cover_url:
-                return
-            try:
-                data = await download_cover(client, book.cover_url)
-                if data:
-                    result.dominant_color = await asyncio.to_thread(dominant_color, data)
-            except httpx.HTTPError, ValueError:
-                logger.info("Cover color unavailable")
+            for url in (book.cover_url, book.cover_fallback_url):
+                if not url:
+                    continue
+                try:
+                    data = await download_cover(client, url)
+                    if data:
+                        result.dominant_color = await asyncio.to_thread(dominant_color, data)
+                        if result.dominant_color:
+                            return
+                except httpx.HTTPError, ValueError:
+                    logger.info("Cover color unavailable")
 
         async def art():
             try:
@@ -261,7 +264,13 @@ async def _enrich(book: VisualRequest) -> BookVisuals:
 
 
 async def get_visuals(book: VisualRequest) -> BookVisuals:
-    key = (book.id, book.title, book.author, book.cover_url or "")
+    key = (
+        book.id,
+        book.title,
+        book.author,
+        book.cover_url or "",
+        book.cover_fallback_url or "",
+    )
     cached = _cache.get(key)
     if cached and cached[0] > time.monotonic():
         _cache.move_to_end(key)

@@ -6,35 +6,58 @@ import { useBookVisuals } from "./features/books/use-book-visuals";
 import { usePersistentBooks } from "./features/books/use-persistent-books";
 import { ScheduleSection } from "./features/planner/schedule-section";
 import { useReadingPlanner } from "./features/planner/use-reading-planner";
+import { LanguageProvider, useLanguage } from "./i18n";
 
 export function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  );
+}
+
+function AppContent() {
+  const { locale, copy, setLocale } = useLanguage();
   const library = usePersistentBooks();
   const planner = useReadingPlanner(library.books);
   useBookVisuals(library.books, library.updateVisuals);
   return (
     <div class="hon-shell" id="top">
       <a class="skip-link" href="#library">
-        Skip to your books
+        {copy.skip}
       </a>
       <header class="hon-header">
-        <a class="hon-brand-lockup" href="#top" aria-label="Hon home">
+        <a class="hon-brand-lockup" href="#top" aria-label={copy.home}>
           <span class="hon-mark" aria-hidden="true">
             本
           </span>
           <h1 class="hon-brand">hon</h1>
-          <span class="hon-brand-subtitle">reading planner</span>
+          <span class="hon-brand-subtitle">{copy.subtitle}</span>
         </a>
-        <nav aria-label="Main navigation">
+        <nav aria-label={copy.navigation}>
           <a href="#library">
-            Your books <Icon name="arrowDown" size={16} />
+            {copy.yourBooks} <Icon name="arrowDown" size={16} />
           </a>
           <a href="#schedule">
-            Schedule <Icon name="arrowDown" size={16} />
+            {copy.schedule} <Icon name="arrowDown" size={16} />
           </a>
         </nav>
+        <label class="hon-language">
+          <span class="sr-only">{copy.language}</span>
+          <select
+            aria-label={copy.language}
+            value={locale}
+            onChange={(event) =>
+              setLocale(event.currentTarget.value as "en" | "pt-BR")
+            }
+          >
+            <option value="pt-BR">Português (Brasileiro)</option>
+            <option value="en">English</option>
+          </select>
+        </label>
       </header>
       <main>
-        <section class="hon-settings" aria-label="Plan your reading">
+        <section class="hon-settings" aria-label={copy.plan}>
           <PlannerControls planner={planner} bookCount={library.books.length} />
         </section>
         <div class="hon-dashboard">
@@ -46,7 +69,7 @@ export function App() {
             <div class="hon-section-heading">
               <h2 id="library-heading">
                 <Icon name="books" size={24} />
-                Your books
+                {copy.yourBooks}
               </h2>
             </div>
             <BookSearch onAdd={library.addBook} />
@@ -60,7 +83,7 @@ export function App() {
           <aside
             class="hon-schedule"
             id="schedule"
-            aria-label="Reading schedule"
+            aria-label={copy.readingSchedule}
           >
             <ScheduleSection
               books={library.books}
@@ -76,7 +99,7 @@ export function App() {
       </main>
       <footer class="hon-footer">
         <span>
-          Made with love by 🧡💜{" "}
+          {copy.madeWithLove}{" "}
           <a href="https://fofinhos.studio/">fofinhos.studio</a>
         </span>
         <a

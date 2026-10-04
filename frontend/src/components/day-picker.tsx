@@ -1,4 +1,5 @@
-import { ALL_DAYS, DAY_LABELS, type DayOfWeek } from "../types";
+import { useLanguage } from "../i18n";
+import { ALL_DAYS, type DayOfWeek } from "../types";
 
 interface Props {
   selected: DayOfWeek[];
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export function DayPicker({ selected, onChange }: Props) {
+  const { copy } = useLanguage();
   const selectedSet = new Set(selected);
 
   const toggle = (day: DayOfWeek) => {
@@ -17,7 +19,7 @@ export function DayPicker({ selected, onChange }: Props) {
   };
 
   return (
-    <fieldset class="day-picker" aria-label="Reading days">
+    <fieldset class="day-picker" aria-label={copy.planner.readingDays}>
       {ALL_DAYS.map((day) => {
         const active = selectedSet.has(day);
         return (
@@ -28,7 +30,7 @@ export function DayPicker({ selected, onChange }: Props) {
             aria-pressed={active ? "true" : "false"}
             onClick={() => toggle(day)}
           >
-            {DAY_LABELS[day]}
+            {copy.planner.days[day]}
           </button>
         );
       })}

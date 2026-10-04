@@ -1,6 +1,8 @@
 import { Icon } from "../../components/icon";
+import { useLanguage } from "../../i18n";
 
 export function BookListEmpty() {
+  const { copy } = useLanguage();
   return (
     <div class="book-list-empty">
       <Icon
@@ -9,7 +11,7 @@ export function BookListEmpty() {
         size={32}
         aria-hidden="true"
       />
-      <p class="book-list-empty__text">Your library is empty.</p>
+      <p class="book-list-empty__text">{copy.books.empty}</p>
     </div>
   );
 }

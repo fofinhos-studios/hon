@@ -1,3 +1,4 @@
+import { useLanguage } from "../i18n";
 import { Icon } from "./icon";
 
 interface Props {
@@ -17,6 +18,7 @@ export function ReorderControls({
   last,
   showHandle = true,
 }: Props) {
+  const { copy } = useLanguage();
   return (
     <div class="reorder-controls">
       {showHandle && (
@@ -33,7 +35,7 @@ export function ReorderControls({
           <button
             class="hon-icon-button"
             type="button"
-            aria-label={`Move ${title} up`}
+            aria-label={copy.books.moveUp(title)}
             disabled={first}
             onClick={() => onMove(-1)}
           >
@@ -42,7 +44,7 @@ export function ReorderControls({
           <button
             class="hon-icon-button"
             type="button"
-            aria-label={`Move ${title} down`}
+            aria-label={copy.books.moveDown(title)}
             disabled={last}
             onClick={() => onMove(1)}
           >

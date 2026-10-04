@@ -415,6 +415,25 @@ ul {
 .hon-header nav {
   display: flex;
   gap: var(--space-6);
+  margin-left: auto;
+}
+.hon-language {
+  flex: none;
+}
+.hon-language select {
+  min-height: var(--target);
+  width: min(13rem, 55vw);
+  padding: 0 var(--space-3);
+  border: var(--rule);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.hon-language select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 .hon-header nav a {
   display: inline-flex;
@@ -742,6 +761,7 @@ ul {
   overflow: hidden;
   padding: var(--space-4) var(--space-6) var(--space-6);
   background: var(--book-surface);
+  transition: background-color var(--motion-normal) var(--ease);
 }
 .book-backdrop {
   position: absolute;
@@ -974,7 +994,9 @@ ul {
   background: var(--book-surface);
   border: var(--rule);
   padding: var(--space-4);
-  transition: transform var(--motion-normal) var(--ease);
+  transition:
+    transform var(--motion-normal) var(--ease),
+    background-color var(--motion-normal) var(--ease);
 }
 .schedule-view:not(.schedule-view--compact) .schedule-view__item {
   padding: var(--space-3) var(--space-2);
@@ -1266,6 +1288,22 @@ ul {
   }
 }
 @media (max-width: 767px) {
+  .hon-header {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+  .hon-header nav {
+    width: 100%;
+    border-top: var(--rule);
+    margin-top: var(--space-2);
+    margin-left: 0;
+    justify-content: space-between;
+    order: 3;
+  }
+  .hon-language {
+    margin-left: auto;
+  }
   .reading-planner__controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
@@ -1286,19 +1324,8 @@ ul {
   }
 }
 @media (max-width: 639px) {
-  .hon-header {
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    padding-block: var(--space-3);
-  }
-  .hon-header nav {
-    width: 100%;
-    border-top: var(--rule);
-    margin-top: var(--space-2);
-    justify-content: space-between;
-  }
   .hon-brand-subtitle {
-    max-width: none;
+    display: none;
   }
   .hon-library,
   .hon-schedule {
@@ -1334,6 +1361,11 @@ ul {
   }
   .ds-swatches {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 359px) {
+  .hon-language select {
+    width: 48vw;
   }
 }
 @media (max-width: 479px) {

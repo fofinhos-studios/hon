@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { BookSearchResults } from "../features/books/book-search-results";
 import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
-import { searchBooks as defaultSearchBooks } from "../services/api";
+import { useLanguage } from "../i18n";
+import {
+  getBookVisuals,
+  prefetchBookVisuals,
+  searchBooks as defaultSearchBooks,
+} from "../services/api";
 import type { Book, SearchBook } from "../types";
 import { Icon } from "./icon";
 
@@ -12,6 +17,7 @@ interface Props {
 }
 
 export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
+  const { copy } = useLanguage();
   const search = useBookSearch(searchBooks);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
@@ -27,20 +33,30 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
   useEffect(() => {
     if (manualOpen) manualInput.current?.focus();
   }, [manualOpen]);
+  useEffect(() => {
+    for (const book of search.results) prefetchBookVisuals(book);
+  }, [search.results]);
   const manualPageCount = Number(manualPages);
   const canAddManual =
     manualTitle.trim().length > 0 &&
     Number.isSafeInteger(manualPageCount) &&
     manualPageCount > 0;
 
-  const handleAdd = (book: SearchBook) => {
+  const handleAdd = async (book: SearchBook) => {
     if (!book.page_count) {
       setPendingBook(book);
       setEditionPages("");
       search.reset();
       return;
     }
-    onAdd({ ...book, page_count: book.page_count });
+    const visuals = await getBookVisuals(book).catch(() => undefined);
+    onAdd({
+      ...book,
+      page_count: book.page_count,
+      ...(visuals
+        ? { visuals, visuals_checked_at: Date.now() }
+        : {}),
+    });
     setPendingBook(null);
     search.reset();
     searchInput.current?.focus();
@@ -69,7 +85,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
     <div class="book-search">
       <section class="book-search__section" aria-labelledby="book-search-title">
         <p class="book-search__subtitle hon-mono" id="book-search-title">
-          Find a book
+          {copy.search.title}
         </p>
         <div class="book-search__entry-row">
           <div class="book-search__input-wrap">
@@ -83,12 +99,12 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
               class="hon-input book-search__input"
               ref={searchInput}
               type="search"
-              placeholder="Title, author or ISBN"
+              placeholder={copy.search.placeholder}
               value={search.query}
               onInput={(e) =>
                 search.setQuery((e.target as HTMLInputElement).value)
               }
-              aria-label="Search books"
+              aria-label={copy.search.label}
               aria-busy={search.loading}
               aria-autocomplete="list"
               aria-controls={
@@ -103,7 +119,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
               <button
                 type="button"
                 class="hon-icon-button book-search__input-action"
-                aria-label="Clear search"
+                aria-label={copy.search.clear}
                 onClick={() => {
                   search.reset();
                   searchInput.current?.focus();
@@ -116,7 +132,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
           <button
             type="button"
             class="hon-btn book-search__manual-toggle"
-            aria-label="Add manually"
+            aria-label={copy.search.addManually}
             aria-expanded={manualOpen}
             aria-controls={manualOpen ? "book-manual-form" : undefined}
             onClick={() => {
@@ -125,7 +141,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
             }}
           >
             <Icon name="plus" size={16} />
-            <span>Add manually</span>
+            <span>{copy.search.addManually}</span>
           </button>
         </div>
 
@@ -134,19 +150,19 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
             id="book-manual-form"
             class="book-search__manual"
             onSubmit={handleManualSubmit}
-            aria-label="Add a book manually"
+            aria-label={copy.search.manualForm}
           >
             <div class="book-search__manual-grid">
               <input
                 class="hon-input"
                 ref={manualInput}
                 type="text"
-                placeholder="Book name"
+                placeholder={copy.search.bookName}
                 value={manualTitle}
                 onInput={(e) =>
                   setManualTitle((e.target as HTMLInputElement).value)
                 }
-                aria-label="Book name"
+                aria-label={copy.search.bookName}
               />
               <input
                 class="hon-input book-search__manual-pages"
@@ -154,12 +170,12 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
                 min="1"
                 step="1"
                 inputMode="numeric"
-                placeholder="Pages"
+                placeholder={copy.search.pages}
                 value={manualPages}
                 onInput={(e) =>
                   setManualPages((e.target as HTMLInputElement).value)
                 }
-                aria-label="Number of pages"
+                aria-label={copy.search.numberOfPages}
               />
               <button
                 class="hon-btn hon-btn--accent book-search__manual-submit"
@@ -167,7 +183,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
                 disabled={!canAddManual}
               >
                 <Icon name="plus" size={14} aria-hidden="true" />
-                <span>Add book</span>
+                <span>{copy.search.addBook}</span>
               </button>
               <button
                 class="hon-btn"
@@ -177,7 +193,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
                   searchInput.current?.focus();
                 }}
               >
-                Cancel
+                {copy.search.cancel}
               </button>
             </div>
           </form>
@@ -187,17 +203,16 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
           key={search.query}
           loading={search.loading}
           error={search.error}
+          errorCode={search.errorCode}
           resultCount={search.results.length}
         />
         <BookSearchResults results={search.results} onSelect={handleAdd} />
         {search.partial && (
-          <p class="book-search__status">
-            Some catalogs are unavailable. Results may be incomplete.
-          </p>
+          <p class="book-search__status">{copy.search.partial}</p>
         )}
         {search.searched && search.results.length === 0 && !search.error && (
           <p class="book-search__status" aria-live="polite">
-            No books found. Try a title, author or ISBN.
+            {copy.search.noResults}
           </p>
         )}
         {pendingBook && (
@@ -210,9 +225,9 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
               handleAdd({ ...pendingBook, page_count: pages });
             }}
           >
-            <p>{pendingBook.title} — enter the page count.</p>
+            <p>{copy.search.enterPages(pendingBook.title)}</p>
             <label>
-              Pages
+              {copy.search.pages}
               <input
                 class="hon-input"
                 ref={editionInput}
@@ -225,7 +240,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
               />
             </label>
             <button type="submit" class="hon-btn hon-btn--accent">
-              Add edition
+              {copy.search.addEdition}
             </button>
             <button
               type="button"
@@ -235,7 +250,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
                 searchInput.current?.focus();
               }}
             >
-              Cancel
+              {copy.search.cancel}
             </button>
           </form>
         )}

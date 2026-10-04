@@ -1,5 +1,6 @@
 import { Icon } from "../../components/icon";
 import { Tooltip } from "../../components/tooltip";
+import { useLanguage } from "../../i18n";
 
 const DEFAULT_SLIDER_MAX = 200;
 
@@ -22,13 +23,14 @@ export function ReadingTargetControl({
   onPagesChange,
   onDateChange,
 }: Props) {
+  const { copy, locale } = useLanguage();
   return (
     <>
       <section class="reading-planner__section">
         <div class="reading-planner__label">
           <Icon name="clock" size={16} aria-hidden="true" />
-          <label for="ppd-input">Pages per day</label>
-          <Tooltip content="Set daily pages. Finish dates update from this pace." />
+          <label for="ppd-input">{copy.planner.pagesPerDay}</label>
+          <Tooltip content={copy.planner.pagesTip} />
         </div>
         <div class="reading-planner__ppd">
           <input
@@ -52,7 +54,7 @@ export function ReadingTargetControl({
             onInput={(event) =>
               onPagesChange(Number((event.target as HTMLInputElement).value))
             }
-            aria-label="Pages per day slider"
+            aria-label={copy.planner.pagesSlider}
             disabled={disabled}
           />
         </div>
@@ -60,13 +62,14 @@ export function ReadingTargetControl({
       <section class="reading-planner__section">
         <div class="reading-planner__label">
           <Icon name="calendar" size={16} aria-hidden="true" />
-          <label for="finish-input">Finish by</label>
-          <Tooltip content="Set target date. Pages per day update to meet it." />
+          <label for="finish-input">{copy.planner.finishBy}</label>
+          <Tooltip content={copy.planner.dateTip} />
         </div>
         <input
           class="hon-input hon-mono reading-planner__date-input"
           id="finish-input"
           type="date"
+          lang={locale}
           value={finishDate}
           min={today}
           onInput={(event) =>
@@ -76,7 +79,7 @@ export function ReadingTargetControl({
         />
         {dateTooSoon && (
           <p class="reading-planner__warn" role="alert">
-            Date is in the past.
+            {copy.planner.datePast}
           </p>
         )}
       </section>

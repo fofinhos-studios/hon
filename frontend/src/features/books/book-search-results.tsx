@@ -1,3 +1,4 @@
+import { useLanguage } from "../../i18n";
 import type { SearchBook } from "../../types";
 import { BookCover } from "./book-art";
 
@@ -6,15 +7,8 @@ interface Props {
   onSelect: (book: SearchBook) => void;
 }
 
-const LANGUAGES: Record<string, string> = {
-  pt: "Português",
-  en: "English",
-  es: "Español",
-  fr: "Français",
-  de: "Deutsch",
-};
-
 export function BookSearchResults({ results, onSelect }: Props) {
+  const { copy, languageName, number } = useLanguage();
   if (results.length === 0) return null;
   return (
     <ul class="book-search__results" id="book-search-results">
@@ -36,14 +30,12 @@ export function BookSearchResults({ results, onSelect }: Props) {
               <span class="book-search__result-meta">{book.author}</span>
               <span class="book-search__result-meta">
                 {[
-                  book.language
-                    ? LANGUAGES[book.language] || book.language
-                    : null,
+                  book.language ? languageName(book.language) : null,
                   book.publisher,
                   book.published_date,
                   book.page_count
-                    ? `${book.page_count} pp`
-                    : "Pages not listed",
+                    ? copy.books.pageCount(number(book.page_count))
+                    : copy.search.pagesNotListed,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

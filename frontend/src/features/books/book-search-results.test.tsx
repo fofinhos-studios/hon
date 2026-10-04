@@ -42,7 +42,7 @@ describe("BookSearchResults", () => {
       />,
     );
 
-    expect(view.getByText(/Português · Intrínseca/)).toBeTruthy();
+    expect(view.getByText(/Portuguese · Intrínseca/)).toBeTruthy();
     expect(view.getByText("ISBN 9788551012239")).toBeTruthy();
   });
 });

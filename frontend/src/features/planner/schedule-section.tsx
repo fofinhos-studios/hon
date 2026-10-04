@@ -1,5 +1,6 @@
 import { Icon } from "../../components/icon";
 import { ScheduleView } from "../../components/schedule-view";
+import { useLanguage } from "../../i18n";
 import type { Book, ReadingMethod, ScheduleResult } from "../../types";
 
 interface Props {
@@ -21,6 +22,7 @@ export function ScheduleSection({
   schedule,
   onReorder,
 }: Props) {
+  const { copy } = useLanguage();
   const showSchedule = bookCount > 0 && !noDaysWarning && schedule !== null;
   return (
     <section class="reading-planner__section">
@@ -28,16 +30,14 @@ export function ScheduleSection({
         <div class="hon-section-heading">
           <h2>
             <Icon name="route" size={24} />
-            <span>Schedule</span>
+            <span>{copy.schedule}</span>
           </h2>
         </div>
       )}
       {bookCount === 0 ? (
-        <p class="reading-planner__empty">Add books to get started.</p>
+        <p class="reading-planner__empty">{copy.planner.empty}</p>
       ) : noDaysWarning ? (
-        <p class="reading-planner__empty">
-          Select reading days to see your schedule.
-        </p>
+        <p class="reading-planner__empty">{copy.planner.selectDays}</p>
       ) : schedule ? (
         <ScheduleView
           books={books}

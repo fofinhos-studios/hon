@@ -61,4 +61,17 @@ describe("searchBooks", () => {
       expect(error).toHaveProperty("message", "Search failed");
     }
   });
+
+  test("classifies timeout responses for localized display", async () => {
+    mockFetch({
+      ok: false,
+      status: 504,
+      json: async () => ({ detail: "Book search timed out" }),
+    });
+
+    await expect(searchBooks("dune")).rejects.toMatchObject({
+      code: "timeout",
+      message: "Book search timed out",
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { Icon } from "../../components/icon";
+import { useLanguage } from "../../i18n";
 import type { Book } from "../../types";
 import { safeImageUrl } from "./book-visuals";
 
@@ -48,6 +49,7 @@ export function BookCover({
   book: CoverBook;
   priority?: ImagePriority;
 }) {
+  const { copy } = useLanguage();
   const [failed, setFailed] = useState<string[]>([]);
   const src = coverSources(book).find(
     (url) => url && !failed.includes(url) && !recentlyFailed(url),
@@ -56,7 +58,7 @@ export function BookCover({
     <img
       class="book-cover"
       src={src}
-      alt={`Cover of ${book.title}`}
+      alt={copy.books.cover(book.title)}
       width={112}
       loading={priority ? "eager" : "lazy"}
       fetchPriority={priority === "high" ? "high" : "auto"}
@@ -77,7 +79,7 @@ export function BookCover({
     <div
       class="book-cover book-cover--placeholder"
       role="img"
-      aria-label={`No cover for ${book.title}`}
+      aria-label={copy.books.noCover(book.title)}
     >
       <Icon name="bookOpen" size={32} />
       <span>hon / 本</span>
@@ -116,13 +118,14 @@ export function BookBackdrop({
 }
 
 export function ArtCredit({ book }: { book: Book }) {
+  const { copy } = useLanguage();
   const art = book.visuals?.artwork;
   if (!art || book.background_hidden) return null;
   const source = safeImageUrl(art.source_url);
   if (!source) return null;
   return (
     <details class="art-credit">
-      <summary>Image credit</summary>
+      <summary>{copy.books.imageCredit}</summary>
       <p>
         <a href={source} target="_blank" rel="noreferrer">
           {art.author} · {art.license}

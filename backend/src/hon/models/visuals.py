@@ -8,6 +8,7 @@ class VisualRequest(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]
     author: Annotated[str, StringConstraints(strip_whitespace=True, max_length=256)] = ""
     cover_url: Annotated[str, Field(max_length=2048)] | None = None
+    cover_fallback_url: Annotated[str, Field(max_length=2048)] | None = None
 
 
 class Artwork(BaseModel):

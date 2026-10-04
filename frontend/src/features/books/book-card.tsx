@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Icon } from "../../components/icon";
+import { useLanguage } from "../../i18n";
 import type { Book } from "../../types";
 import { ArtCredit, BookBackdrop, BookCover } from "./book-art";
 import { pagesFromPercent, parseProgressInput } from "./book-progress";
@@ -21,6 +22,7 @@ export function BookCard({
   onUpdateProgress,
   onUpdatePageCount,
 }: Props) {
+  const { copy, number, author } = useLanguage();
   const progress = Math.round(((book.pages_read ?? 0) / book.page_count) * 100);
   const [editing, setEditing] = useState(false);
   const [pages, setPages] = useState(String(book.page_count));
@@ -54,7 +56,7 @@ export function BookCard({
           <button
             type="button"
             class="hon-icon-button"
-            aria-label={`Remove ${book.title}`}
+            aria-label={copy.books.remove(book.title)}
             onClick={onRemove}
           >
             <Icon name="x" />
@@ -66,14 +68,14 @@ export function BookCard({
             href={goodreadsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+            aria-label={copy.books.goodreads(book.title)}
           >
             <BookCover book={book} priority={imagePriority} />
           </a>
           <div class="book-plate__info">
             <h3 class="book-plate__title">
               <span class="book-plate__position">
-                <span class="sr-only">Position </span>
+                <span class="sr-only">{copy.books.position} </span>
                 {index + 1}
               </span>
               <a
@@ -81,13 +83,13 @@ export function BookCard({
                 href={goodreadsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="View on Goodreads"
-                aria-label={`View ${book.title} on Goodreads (opens in a new tab)`}
+                title={copy.books.goodreadsTitle}
+                aria-label={copy.books.goodreads(book.title)}
               >
                 {book.title}
               </a>
             </h3>
-            <p>{book.author}</p>
+            <p>{author(book.author)}</p>
             <div class="book-plate__page-count">
               {editing ? (
                 <form
@@ -106,7 +108,7 @@ export function BookCard({
                   }}
                 >
                   <label class="sr-only" for={`book-pages-${book.id}`}>
-                    Total pages for {book.title}
+                    {copy.books.totalPages(book.title)}
                   </label>
                   <input
                     id={`book-pages-${book.id}`}
@@ -125,21 +127,20 @@ export function BookCard({
                     class="hon-btn hon-btn--accent"
                     disabled={!valid}
                   >
-                    Save
+                    {copy.books.save}
                   </button>
                   <button type="button" class="hon-btn" onClick={closeEditor}>
-                    Cancel
+                    {copy.books.cancel}
                   </button>
                   {!valid && (
                     <p class="book-plate__edit-error" role="alert">
-                      Enter a whole number of at least {minimum} pages
-                      {minimum > 1 ? " to keep your reading progress" : ""}.
+                      {copy.books.editError(minimum)}
                     </p>
                   )}
                 </form>
               ) : (
                 <span class="hon-eyebrow">
-                  {book.page_count.toLocaleString()} pages
+                  {copy.books.pageCount(number(book.page_count))}
                 </span>
               )}
               {!editing && (
@@ -147,7 +148,7 @@ export function BookCard({
                   type="button"
                   class="book-plate__edit-trigger"
                   ref={editButton}
-                  aria-label={`Edit page count for ${book.title}`}
+                  aria-label={copy.books.editPageCount(book.title)}
                   aria-expanded={false}
                   onClick={() => {
                     setPages(String(book.page_count));
@@ -164,7 +165,7 @@ export function BookCard({
       <div class="book-plate__progress">
         <div class="book-plate__progress-inputs">
           <label>
-            <span class="sr-only">Pages read</span>
+            <span class="sr-only">{copy.books.pagesRead}</span>
             <input
               type="number"
               min="0"
@@ -180,13 +181,15 @@ export function BookCard({
                 )
               }
               class="hon-input"
-              aria-label={`Pages read for ${book.title}`}
+              aria-label={copy.books.pagesReadFor(book.title)}
             />
           </label>
-          <span class="book-plate__progress-total">/ {book.page_count} pp</span>
-          <span>or</span>
+          <span class="book-plate__progress-total">
+            / {copy.books.shortPages(number(book.page_count))}
+          </span>
+          <span>{copy.books.or}</span>
           <label>
-            <span class="sr-only">Percent</span>
+            <span class="sr-only">{copy.books.percent}</span>
             <input
               type="number"
               min="0"
@@ -199,20 +202,20 @@ export function BookCard({
                 )
               }
               class="hon-input"
-              aria-label={`Percentage read for ${book.title}`}
+              aria-label={copy.books.percentageReadFor(book.title)}
             />
           </label>
           <span>%</span>
         </div>
         <div class="book-plate__progress-summary">
           <div class="book-plate__progress-heading">
-            <span class="hon-eyebrow">Reading progress</span>
+            <span class="hon-eyebrow">{copy.books.readingProgress}</span>
             <span>{progress}%</span>
           </div>
           <progress
             value={book.pages_read ?? 0}
             max={book.page_count}
-            aria-label={`Reading progress for ${book.title}`}
+            aria-label={copy.books.readingProgressFor(book.title)}
           />
         </div>
       </div>
