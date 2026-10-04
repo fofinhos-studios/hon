@@ -2,6 +2,7 @@ import type {
   Book,
   BookSchedule,
   DayOfWeek,
+  ReadingSession,
   ScheduleResult,
 } from "../../types";
 import { remainingPages, totalRemainingPages } from "./book-progress";
@@ -43,6 +44,7 @@ export function calculateInterleavedSchedule(
   startDateISO: string,
 ): ScheduleResult {
   const firstDay = firstReadingDay(startDateISO, readingDays);
+  const sessions: ReadingSession[] = [];
   const states = books.map((book) => ({
     book,
     remaining: remainingPages(book),
@@ -66,6 +68,11 @@ export function calculateInterleavedSchedule(
       const allocation = allocations[allocationIndex] ?? 0;
       if (allocation <= 0) return;
       const state = states[stateIndex];
+      sessions.push({
+        date: currentDay,
+        book_id: state.book.id,
+        pages: allocation,
+      });
       state.startDate ||= currentDay;
       state.remaining -= allocation;
       state.assignedPages += allocation;
@@ -88,6 +95,7 @@ export function calculateInterleavedSchedule(
   }));
   return {
     books: schedules,
+    sessions,
     total_pages: totalRemainingPages(books),
     total_reading_days: readingDayCount,
     finish_date: schedules.reduce(

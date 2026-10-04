@@ -4,9 +4,9 @@ import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
 import { useLanguage } from "../i18n";
 import {
+  searchBooks as defaultSearchBooks,
   getBookVisuals,
   prefetchBookVisuals,
-  searchBooks as defaultSearchBooks,
 } from "../services/api";
 import type { Book, SearchBook } from "../types";
 import { Icon } from "./icon";
@@ -53,9 +53,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
     onAdd({
       ...book,
       page_count: book.page_count,
-      ...(visuals
-        ? { visuals, visuals_checked_at: Date.now() }
-        : {}),
+      ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
     });
     setPendingBook(null);
     search.reset();

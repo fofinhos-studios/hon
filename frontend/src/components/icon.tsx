@@ -7,9 +7,12 @@ import expand from "@phosphor-icons/core/assets/regular/arrows-out-simple.svg?ra
 import bookOpen from "@phosphor-icons/core/assets/regular/book-open.svg?raw";
 import books from "@phosphor-icons/core/assets/regular/books.svg?raw";
 import calendar from "@phosphor-icons/core/assets/regular/calendar-dots.svg?raw";
+import check from "@phosphor-icons/core/assets/regular/check.svg?raw";
 import spinner from "@phosphor-icons/core/assets/regular/circle-notch.svg?raw";
 import clock from "@phosphor-icons/core/assets/regular/clock.svg?raw";
+import copy from "@phosphor-icons/core/assets/regular/copy.svg?raw";
 import grip from "@phosphor-icons/core/assets/regular/dots-six-vertical.svg?raw";
+import download from "@phosphor-icons/core/assets/regular/download-simple.svg?raw";
 import eyeSlash from "@phosphor-icons/core/assets/regular/eye-slash.svg?raw";
 import eye from "@phosphor-icons/core/assets/regular/eye.svg?raw";
 import split from "@phosphor-icons/core/assets/regular/git-fork.svg?raw";
@@ -30,8 +33,11 @@ const icons = {
   bookOpen,
   books,
   calendar,
+  check,
   clock,
   collapse,
+  copy,
+  download,
   eye,
   eyeSlash,
   expand,

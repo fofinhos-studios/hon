@@ -111,6 +111,17 @@ const en = {
     drag: "Drag to reorder",
     dateTo: "to",
     aboutPace: (count: string) => `About ${count} pages/day`,
+    copyCalendarUrl: "Copy calendar URL",
+    copyingCalendarUrl: "Copying…",
+    copiedCalendarUrl: "URL copied",
+    downloadCalendar: "Download .ics",
+    downloadingCalendar: "Downloading…",
+    downloadedCalendar: "Downloaded",
+    calendarUrlTooLong:
+      "This plan makes a calendar URL that is too long. Download the .ics file instead.",
+    calendarCopyFailed:
+      "Could not copy the calendar URL. Check clipboard permissions and try again.",
+    calendarDownloadFailed: "Could not download the calendar. Try again.",
   },
   moreInformation: "More information",
 };
@@ -227,6 +238,18 @@ const pt: Copy = {
     drag: "Arraste para reorganizar",
     dateTo: "até",
     aboutPace: (count: string) => `Cerca de ${count} páginas por dia`,
+    copyCalendarUrl: "Copiar URL do calendário",
+    copyingCalendarUrl: "Copiando…",
+    copiedCalendarUrl: "URL copiada",
+    downloadCalendar: "Baixar .ics",
+    downloadingCalendar: "Baixando…",
+    downloadedCalendar: "Baixado",
+    calendarUrlTooLong:
+      "Este plano gera uma URL de calendário longa demais. Baixe o arquivo .ics.",
+    calendarCopyFailed:
+      "Não foi possível copiar a URL do calendário. Verifique a permissão da área de transferência e tente novamente.",
+    calendarDownloadFailed:
+      "Não foi possível baixar o calendário. Tente novamente.",
   },
   moreInformation: "Mais informações",
 };

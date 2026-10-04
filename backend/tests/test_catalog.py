@@ -105,7 +105,12 @@ def test_bookinfo_parses_publisher_cover_and_author_without_translator():
 
 @pytest.mark.asyncio
 async def test_bookinfo_broadens_failed_exact_search_for_typo():
-    client = async_client({"books": []}, {"books": [{"isbn": ISBN, "titulo": "Antes que o café esfrie"}]})
+    client = async_client()
+    client.get.side_effect = lambda _url, *, params: response(
+        {"books": [{"isbn": ISBN, "titulo": "Antes que o café esfrie"}]}
+        if params["titulo"] == "esfrie"
+        else {"books": []}
+    )
     with patch("hon.services.bookinfo.httpx.AsyncClient", return_value=client):
         results = await bookinfo.search("Antes que o caff esfrie")
     assert results[0].title == "Antes que o café esfrie"

@@ -55,8 +55,15 @@ export interface BookSchedule {
   daily_pages?: number;
 }
 
+export interface ReadingSession {
+  date: string; // ISO YYYY-MM-DD
+  book_id: string;
+  pages: number;
+}
+
 export interface ScheduleResult {
   books: BookSchedule[];
+  sessions: ReadingSession[];
   total_pages: number;
   total_reading_days: number;
   finish_date: string;

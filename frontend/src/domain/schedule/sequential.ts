@@ -2,6 +2,7 @@ import type {
   Book,
   BookSchedule,
   DayOfWeek,
+  ReadingSession,
   ScheduleResult,
 } from "../../types";
 import { remainingPages, totalRemainingPages } from "./book-progress";
@@ -14,11 +15,13 @@ export function calculateSequentialSchedule(
   startDateISO: string,
 ): ScheduleResult {
   const schedules: BookSchedule[] = [];
+  const sessions: ReadingSession[] = [];
   let currentStart = firstReadingDay(startDateISO, readingDays);
   let lastActiveFinish: string | null = null;
 
   for (const book of books) {
-    const daysNeeded = Math.ceil(remainingPages(book) / pagesPerDay);
+    const remaining = remainingPages(book);
+    const daysNeeded = Math.ceil(remaining / pagesPerDay);
     const finish: string =
       daysNeeded > 0
         ? addReadingDays(currentStart, readingDays, daysNeeded)
@@ -29,6 +32,15 @@ export function calculateSequentialSchedule(
       finish_date: finish,
     });
     if (daysNeeded > 0) {
+      let day = currentStart;
+      for (let index = 0; index < daysNeeded; index += 1) {
+        sessions.push({
+          date: day,
+          book_id: book.id,
+          pages: Math.min(pagesPerDay, remaining - index * pagesPerDay),
+        });
+        if (index < daysNeeded - 1) day = nextReadingDayAfter(day, readingDays);
+      }
       lastActiveFinish = finish;
       currentStart = nextReadingDayAfter(finish, readingDays);
     }
@@ -36,6 +48,7 @@ export function calculateSequentialSchedule(
 
   return {
     books: schedules,
+    sessions,
     total_pages: totalRemainingPages(books),
     total_reading_days: books.reduce(
       (sum, book) => sum + Math.ceil(remainingPages(book) / pagesPerDay),

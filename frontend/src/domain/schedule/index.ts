@@ -20,6 +20,7 @@ export function calculateSchedule(
   if (books.length === 0 || readingDays.length === 0 || pagesPerDay <= 0) {
     return {
       books: [],
+      sessions: [],
       total_pages: 0,
       total_reading_days: 0,
       finish_date: startDateISO,

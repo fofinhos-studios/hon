@@ -28,6 +28,7 @@ describe("schedule public API", () => {
       calculateSchedule([], EVERY_DAY, 20, "sequential", "2026-01-05"),
     ).toEqual({
       books: [],
+      sessions: [],
       total_pages: 0,
       total_reading_days: 0,
       finish_date: "2026-01-05",

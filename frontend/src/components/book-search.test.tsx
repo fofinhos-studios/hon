@@ -57,7 +57,7 @@ test("adds a selected result and resets search", async () => {
   });
   fireEvent.click(view.getByRole("button", { name: /Dune/ }));
 
-  expect(onAdd).toHaveBeenCalledWith(book);
+  await waitFor(() => expect(onAdd).toHaveBeenCalledWith(book));
   expect(input.value).toBe("");
   expect(view.queryByText("Dune")).toBeNull();
 });
@@ -166,7 +166,9 @@ test("keeps an edition without pages and asks for its count before adding", asyn
   expect(onAdd).not.toHaveBeenCalled();
   fireEvent.input(view.getByLabelText("Pages"), { target: { value: "480" } });
   fireEvent.click(view.getByRole("button", { name: "Add edition" }));
-  expect(onAdd).toHaveBeenCalledWith({ ...edition, page_count: 480 });
+  await waitFor(() =>
+    expect(onAdd).toHaveBeenCalledWith({ ...edition, page_count: 480 }),
+  );
   expect(view.queryByRole("button", { name: "Add edition" })).toBeNull();
 });
 

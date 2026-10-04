@@ -25,4 +25,22 @@ describe("interleaved schedule", () => {
     expect(result.total_pages).toBe(150);
     expect(result.total_reading_days).toBe(5);
   });
+
+  test("records each book's exact allocation on shared reading days", () => {
+    const result = calculateInterleavedSchedule(
+      [makeBook("first", 4), makeBook("second", 2)],
+      [0, 2, 4],
+      3,
+      "2026-01-06",
+    );
+    expect(result.sessions).toEqual([
+      { date: "2026-01-07", book_id: "first", pages: 2 },
+      { date: "2026-01-07", book_id: "second", pages: 1 },
+      { date: "2026-01-09", book_id: "first", pages: 2 },
+      { date: "2026-01-09", book_id: "second", pages: 1 },
+    ]);
+    expect(
+      result.sessions.reduce((sum, session) => sum + session.pages, 0),
+    ).toBe(result.total_pages);
+  });
 });

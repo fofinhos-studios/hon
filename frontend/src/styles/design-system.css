@@ -29,6 +29,8 @@
   --muted-ink: #595954;
   --error-ink: #9b2020;
   --error-surface: #fff0ec;
+  --calendar-export-accent: #ff7438;
+  --calendar-export-accent-hover: #eb622c;
   --book-fallback-1: #b8d5be;
   --book-fallback-2: #afcfe8;
   --book-fallback-3: #f0d982;
@@ -994,9 +996,8 @@ ul {
   background: var(--book-surface);
   border: var(--rule);
   padding: var(--space-4);
-  transition:
-    transform var(--motion-normal) var(--ease),
-    background-color var(--motion-normal) var(--ease);
+  transition: transform var(--motion-normal) var(--ease), background-color
+    var(--motion-normal) var(--ease);
 }
 .schedule-view:not(.schedule-view--compact) .schedule-view__item {
   padding: var(--space-3) var(--space-2);
@@ -1112,6 +1113,36 @@ ul {
 }
 .schedule-view__toggle {
   white-space: nowrap;
+}
+.schedule-view__exports {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.schedule-view__exports .hon-btn {
+  white-space: nowrap;
+}
+.schedule-view__exports .hon-btn:not(.hon-btn--accent) {
+  background: var(--surface-subtle);
+}
+.schedule-view__exports .hon-btn--accent {
+  background: var(--calendar-export-accent);
+  color: var(--ink);
+}
+.schedule-view__exports .hon-btn--accent:hover:not(:disabled) {
+  background: var(--calendar-export-accent-hover);
+  color: var(--ink);
+}
+.schedule-view__exports .hon-btn--accent:disabled {
+  background: var(--surface-subtle);
+  color: var(--muted-ink);
+}
+.schedule-view__export-error {
+  margin-bottom: var(--space-3);
+  color: var(--error-ink);
+  font-size: var(--text-sm);
 }
 .schedule-view__finish {
   display: block;
@@ -1369,6 +1400,9 @@ ul {
   }
 }
 @media (max-width: 479px) {
+  .schedule-view__exports .hon-btn {
+    flex: 1 1 100%;
+  }
   .schedule-view__toggle {
     gap: var(--space-1);
     padding-inline: var(--space-2);

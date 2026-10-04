@@ -4,6 +4,12 @@ import { bookVisualStyle } from "../features/books/book-visuals";
 import { goodreadsBookUrl } from "../features/books/goodreads-link";
 import { useBookReorder } from "../hooks/use-book-reorder";
 import { useLanguage } from "../i18n";
+import {
+  CalendarUrlTooLongError,
+  createCalendarSnapshot,
+  createCalendarUrl,
+  downloadCalendar,
+} from "../services/calendar-export";
 import type { Book, ReadingMethod, ScheduleResult } from "../types";
 import { Icon } from "./icon";
 import { ReorderControls } from "./reorder-controls";
@@ -23,13 +29,52 @@ export function ScheduleView({
   method,
   onReorder,
 }: Props) {
-  const { copy, date: formatDate, number, author } = useLanguage();
+  const { copy, date: formatDate, number, author, locale } = useLanguage();
   const [collapsed, setCollapsed] = useState(true);
+  const [copyState, setCopyState] = useState<"idle" | "working" | "done">(
+    "idle",
+  );
+  const [downloadState, setDownloadState] = useState<
+    "idle" | "working" | "done"
+  >("idle");
+  const [exportError, setExportError] = useState("");
   const { dragState, getItemStyle, handlePointerDown, setItemRef } =
     useBookReorder(books, onReorder);
   const schedulesByBookId = new Map(
     result.books.map((schedule) => [schedule.book.id, schedule]),
   );
+
+  const handleCopyCalendarUrl = async () => {
+    setCopyState("working");
+    setExportError("");
+    try {
+      const snapshot = createCalendarSnapshot(result, locale);
+      const url = await createCalendarUrl(snapshot);
+      await navigator.clipboard.writeText(url);
+      setCopyState("done");
+      window.setTimeout(() => setCopyState("idle"), 2000);
+    } catch (error) {
+      setCopyState("idle");
+      setExportError(
+        error instanceof CalendarUrlTooLongError
+          ? copy.planner.calendarUrlTooLong
+          : copy.planner.calendarCopyFailed,
+      );
+    }
+  };
+
+  const handleDownloadCalendar = async () => {
+    setDownloadState("working");
+    setExportError("");
+    try {
+      await downloadCalendar(createCalendarSnapshot(result, locale));
+      setDownloadState("done");
+      window.setTimeout(() => setDownloadState("idle"), 2000);
+    } catch {
+      setDownloadState("idle");
+      setExportError(copy.planner.calendarDownloadFailed);
+    }
+  };
 
   return (
     <div
@@ -67,6 +112,62 @@ export function ScheduleView({
         <p class="schedule-view__note">
           <Icon name="info" size={14} aria-hidden="true" />
           {copy.planner.sharedPace(number(pagesPerDay))}
+        </p>
+      )}
+
+      <div class="schedule-view__exports">
+        <button
+          type="button"
+          class="hon-btn"
+          disabled={result.sessions.length === 0 || copyState === "working"}
+          aria-live="polite"
+          aria-busy={copyState === "working" ? "true" : undefined}
+          onClick={() => void handleCopyCalendarUrl()}
+        >
+          <Icon
+            name={
+              copyState === "done"
+                ? "check"
+                : copyState === "working"
+                  ? "spinner"
+                  : "copy"
+            }
+            size={18}
+          />
+          {copyState === "working"
+            ? copy.planner.copyingCalendarUrl
+            : copyState === "done"
+              ? copy.planner.copiedCalendarUrl
+              : copy.planner.copyCalendarUrl}
+        </button>
+        <button
+          type="button"
+          class="hon-btn hon-btn--accent"
+          disabled={result.sessions.length === 0 || downloadState === "working"}
+          aria-live="polite"
+          aria-busy={downloadState === "working" ? "true" : undefined}
+          onClick={() => void handleDownloadCalendar()}
+        >
+          <Icon
+            name={
+              downloadState === "done"
+                ? "check"
+                : downloadState === "working"
+                  ? "spinner"
+                  : "download"
+            }
+            size={18}
+          />
+          {downloadState === "working"
+            ? copy.planner.downloadingCalendar
+            : downloadState === "done"
+              ? copy.planner.downloadedCalendar
+              : copy.planner.downloadCalendar}
+        </button>
+      </div>
+      {exportError && (
+        <p class="schedule-view__export-error" role="alert">
+          {exportError}
         </p>
       )}
 

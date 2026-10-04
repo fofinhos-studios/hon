@@ -99,8 +99,11 @@ function readVisualsCache(key: string): CachedVisuals | undefined {
 function writeVisualsCache(key: string, visuals: BookVisuals): void {
   const entry = { checkedAt: Date.now(), visuals };
   visualsCache.set(key, entry);
-  while (visualsCache.size > VISUALS_CACHE_LIMIT)
-    visualsCache.delete(visualsCache.keys().next().value!);
+  while (visualsCache.size > VISUALS_CACHE_LIMIT) {
+    const oldestKey = visualsCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    visualsCache.delete(oldestKey);
+  }
   try {
     const saved = localStorage.getItem(VISUALS_CACHE_KEY);
     const entries: Record<string, unknown> = saved
@@ -117,7 +120,10 @@ function writeVisualsCache(key: string, visuals: BookVisuals): void {
         delete entries[cachedKey];
     }
     const keys = Object.keys(entries);
-    for (const oldKey of keys.slice(0, Math.max(0, keys.length - VISUALS_CACHE_LIMIT)))
+    for (const oldKey of keys.slice(
+      0,
+      Math.max(0, keys.length - VISUALS_CACHE_LIMIT),
+    ))
       delete entries[oldKey];
     localStorage.setItem(VISUALS_CACHE_KEY, JSON.stringify(entries));
   } catch {
