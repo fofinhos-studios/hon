@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 import httpx
 from PIL import Image, UnidentifiedImageError
 
-from hon.models.visuals import Artwork, BookVisuals, VisualRequest
+from hon.models.visuals import COLOR_ALGORITHM_VERSION, Artwork, BookVisuals, VisualRequest
 
 logger = logging.getLogger(__name__)
 COMMONS_URL = "https://commons.wikimedia.org/w/api.php"
@@ -265,6 +265,7 @@ async def _enrich(book: VisualRequest) -> BookVisuals:
 
 async def get_visuals(book: VisualRequest) -> BookVisuals:
     key = (
+        str(COLOR_ALGORITHM_VERSION),
         book.id,
         book.title,
         book.author,

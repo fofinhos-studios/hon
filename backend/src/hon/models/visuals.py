@@ -2,6 +2,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
+COLOR_ALGORITHM_VERSION = 3
+
 
 class VisualRequest(BaseModel):
     id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]
@@ -19,6 +21,6 @@ class Artwork(BaseModel):
 
 
 class BookVisuals(BaseModel):
-    color_version: int = 2
+    color_version: int = COLOR_ALGORITHM_VERSION
     dominant_color: str | None = None
     artwork: Artwork | None = None

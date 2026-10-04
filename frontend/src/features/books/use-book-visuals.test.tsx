@@ -11,7 +11,7 @@ const books: Book[] = ["a", "b", "c"].map((id) => ({
   cover_url: null,
 }));
 const visuals: BookVisuals = {
-  color_version: 2,
+  color_version: 3,
   dominant_color: "#123456",
   artwork: null,
 };

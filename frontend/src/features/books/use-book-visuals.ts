@@ -2,6 +2,8 @@ import { useEffect, useRef } from "preact/hooks";
 import { fetchBookVisuals } from "../../services/api";
 import type { Book, BookVisuals } from "../../types";
 
+const CURRENT_COLOR_VERSION = 3;
+
 // Per mounted library: two requests, no retries on a failed service this session.
 // Cancellation is tied to membership, not progress edits or list order.
 export function useBookVisuals(
@@ -21,7 +23,7 @@ export function useBookVisuals(
       if (running.current.size >= 2) break;
       if (
         (book.visuals &&
-          (book.visuals.color_version ?? 0) >= 2 &&
+          (book.visuals.color_version ?? 0) >= CURRENT_COLOR_VERSION &&
           (!book.visuals_checked_at ||
             Date.now() - book.visuals_checked_at <
               (book.visuals.artwork && book.visuals.dominant_color

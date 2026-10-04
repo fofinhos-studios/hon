@@ -195,7 +195,7 @@ def test_visual_route_and_validation(client):
     with patch("hon.routers.books.get_visuals", AsyncMock(return_value=BookVisuals())):
         response = client.post("/books/visuals", json=BOOK.model_dump())
         assert response.status_code == 200
-        assert response.json() == {"color_version": 2, "dominant_color": None, "artwork": None}
+        assert response.json() == {"color_version": 3, "dominant_color": None, "artwork": None}
         assert client.post("/books/visuals", json={"id": "", "title": ""}).status_code == 422
 
 

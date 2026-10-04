@@ -18,7 +18,7 @@ export class SearchApiError extends Error {
   }
 }
 
-const VISUALS_CACHE_KEY = "hon.book-visuals.v1";
+const VISUALS_CACHE_KEY = "hon.book-visuals.v2";
 const VISUALS_CACHE_LIMIT = 200;
 const VISUALS_CACHE_SUCCESS_TTL = 24 * 60 * 60 * 1000;
 const VISUALS_CACHE_EMPTY_TTL = 60 * 60 * 1000;
