@@ -18,11 +18,16 @@ export function PlannerControls({
       />
       <ReadingTargetControl
         pagesPerDay={planner.pagesPerDay}
+        minutesPerDay={planner.minutesPerDay}
+        hasPages={planner.hasPages}
+        hasAudio={planner.hasAudio}
         finishDate={planner.finishDate}
         today={planner.today}
         disabled={planner.noDaysWarning || bookCount === 0}
         dateTooSoon={planner.dateTooSoonWarning}
+        dateUnreachable={planner.dateUnreachableWarning}
         onPagesChange={planner.setPagesPerDay}
+        onMinutesChange={planner.setMinutesPerDay}
         onDateChange={planner.setFinishDate}
       />
       <ReadingMethodControl
@@ -47,6 +52,7 @@ export function ReadingPlanner({
         bookCount={books.length}
         noDaysWarning={planner.noDaysWarning}
         pagesPerDay={planner.pagesPerDay}
+        minutesPerDay={planner.minutesPerDay}
         method={planner.method}
         schedule={planner.schedule}
         onReorder={onReorder}

@@ -38,6 +38,7 @@ def normalize(item: dict) -> BookResult | None:
     url = non_empty_string(cover.get("grande") or cover.get("media")) if isinstance(cover, dict) else None
     publisher = item.get("editora")
     return BookResult(
+        source="bookinfo",
         id=f"isbn:{isbn}",
         title=title,
         author=", ".join(filter(None, authors)) or "Unknown",
@@ -81,10 +82,7 @@ async def search(query: str) -> list[BookResult]:
                 # Bookinfo's title endpoint is substring-based, so query trigrams
                 # of the two longest words to retrieve nearby spellings.
                 fragments = dict.fromkeys(
-                    term[index : index + 3]
-                    for term in terms[:2]
-                    if len(term) >= 6
-                    for index in range(len(term) - 2)
+                    term[index : index + 3] for term in terms[:2] if len(term) >= 6 for index in range(len(term) - 2)
                 )
                 if not fragments:
                     return books

@@ -21,10 +21,12 @@ export function calculatePagesPerDay(
   let pagesPerDay = Math.ceil(total / available);
   if (pagesPerDay <= 0) return 0;
   while (
-    booksOrPages.reduce(
-      (sum, book) => sum + Math.ceil(remainingPages(book) / pagesPerDay),
-      0,
-    ) > available
+    booksOrPages
+      .filter((book) => book.kind === "page")
+      .reduce(
+        (sum, book) => sum + Math.ceil(remainingPages(book) / pagesPerDay),
+        0,
+      ) > available
   ) {
     pagesPerDay += 1;
   }

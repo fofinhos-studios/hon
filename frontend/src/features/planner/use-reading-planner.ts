@@ -1,28 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import {
-  calculatePagesPerDay,
-  calculateSchedule,
-  todayISO,
-} from "../../domain/schedule";
+import { calculateSchedule, todayISO } from "../../domain/schedule";
+import { targetsForDate } from "../../domain/schedule/targets";
 import type { Book, DayOfWeek, ReadingMethod } from "../../types";
 
 const DEFAULT_PAGES_PER_DAY = 30;
+const DEFAULT_MINUTES_PER_DAY = 30;
 
 export function normalizePagesPerDay(value: number): number {
-  return Math.max(1, Math.round(value));
+  return Number.isFinite(value) ? Math.max(1, Math.round(value)) : 1;
 }
 
 export function useReadingPlanner(books: Book[]) {
   const [readingDays, setReadingDays] = useState<DayOfWeek[]>([0, 1, 2, 3, 4]);
   const [pagesPerDay, setPagesPerDay] = useState(DEFAULT_PAGES_PER_DAY);
+  const [minutesPerDay, setMinutesPerDay] = useState(DEFAULT_MINUTES_PER_DAY);
   const [finishDate, setFinishDate] = useState("");
   const [method, setMethod] = useState<ReadingMethod>("sequential");
   const [driver, setDriver] = useState<"pages" | "date">("pages");
+  const dateBase = useRef({
+    pages: DEFAULT_PAGES_PER_DAY,
+    minutes: DEFAULT_MINUTES_PER_DAY,
+  });
   const today = todayISO();
   // Visual enrichment replaces Book objects, but only order and page counts
   // affect the plan. Keep that input stable while images and colors arrive.
   const planKey = JSON.stringify(
-    books.map(({ id, page_count, pages_read }) => [id, page_count, pages_read]),
+    books.map((book) =>
+      book.kind === "page"
+        ? [book.id, book.kind, book.page_count, book.pages_read]
+        : [book.id, book.kind, book.duration_minutes, book.minutes_listened],
+    ),
   );
   const planInput = useRef({ key: planKey, books });
   if (planInput.current.key !== planKey)
@@ -31,10 +38,32 @@ export function useReadingPlanner(books: Book[]) {
   const schedule = useMemo(
     () =>
       planBooks.length > 0 && readingDays.length > 0 && pagesPerDay > 0
-        ? calculateSchedule(planBooks, readingDays, pagesPerDay, method, today)
+        ? calculateSchedule(
+            planBooks,
+            readingDays,
+            pagesPerDay,
+            method,
+            today,
+            minutesPerDay,
+          )
         : null,
-    [planBooks, readingDays, pagesPerDay, method, today],
+    [planBooks, readingDays, pagesPerDay, minutesPerDay, method, today],
   );
+  const hasPages = books.some((book) => book.kind === "page");
+  const hasAudio = books.some((book) => book.kind === "audiobook");
+  const required =
+    driver === "date" && finishDate && finishDate >= today
+      ? targetsForDate(
+          planBooks,
+          readingDays,
+          today,
+          finishDate,
+          method,
+          dateBase.current,
+        )
+      : null;
+  const requiredPages = required?.pages ?? null;
+  const requiredMinutes = required?.minutes ?? null;
 
   useEffect(() => {
     if (planBooks.length === 0 || readingDays.length === 0) {
@@ -46,19 +75,26 @@ export function useReadingPlanner(books: Book[]) {
       return;
     }
     if (!finishDate) return;
-    const required = calculatePagesPerDay(
-      planBooks,
-      readingDays,
-      today,
-      finishDate,
-      method,
-    );
-    if (required > 0) setPagesPerDay(required);
-  }, [planBooks, readingDays, finishDate, method, driver, today, schedule]);
+    if (requiredPages !== null && requiredPages > 0)
+      setPagesPerDay(requiredPages);
+    if (requiredMinutes !== null && requiredMinutes > 0)
+      setMinutesPerDay(requiredMinutes);
+  }, [
+    planBooks,
+    readingDays,
+    finishDate,
+    driver,
+    schedule,
+    requiredPages,
+    requiredMinutes,
+  ]);
 
   return {
     readingDays,
     pagesPerDay,
+    minutesPerDay,
+    hasPages,
+    hasAudio,
     finishDate,
     method,
     today,
@@ -66,13 +102,24 @@ export function useReadingPlanner(books: Book[]) {
     noDaysWarning: readingDays.length === 0,
     dateTooSoonWarning:
       driver === "date" && finishDate !== "" && finishDate < today,
+    dateUnreachableWarning:
+      driver === "date" &&
+      finishDate !== "" &&
+      finishDate >= today &&
+      required === null,
     setReadingDays,
     setMethod,
     setPagesPerDay: (value: number) => {
       setDriver("pages");
       setPagesPerDay(normalizePagesPerDay(value));
     },
+    setMinutesPerDay: (value: number) => {
+      setDriver("pages");
+      setMinutesPerDay(normalizePagesPerDay(value));
+    },
     setFinishDate: (value: string) => {
+      if (driver !== "date")
+        dateBase.current = { pages: pagesPerDay, minutes: minutesPerDay };
       setDriver("date");
       setFinishDate(value);
     },

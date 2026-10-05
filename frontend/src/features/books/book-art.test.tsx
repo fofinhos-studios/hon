@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, expect, test } from "vitest";
-import type { Book } from "../../types";
+import type { PageBook } from "../../types";
 import {
   ArtCredit,
   BookBackdrop,
@@ -9,10 +9,12 @@ import {
 } from "./book-art";
 import { bookVisualStyle, safeImageUrl } from "./book-visuals";
 
-const book: Book = {
+const book: PageBook = {
   id: "a",
   title: "Book",
   author: "Author",
+  kind: "page",
+  format: "unspecified",
   page_count: 100,
   cover_url: "https://covers.openlibrary.org/cover.jpg",
   visuals: {

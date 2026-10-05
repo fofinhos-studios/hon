@@ -3,7 +3,7 @@ import "../test/setup";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SearchResult } from "../services/api";
-import type { Book } from "../types";
+import type { Book, SearchBook } from "../types";
 import { BookSearch } from "./book-search";
 
 const searchBooksMock = vi.fn(
@@ -34,10 +34,14 @@ test("keeps manual entry beside search and opens it on demand", () => {
 });
 
 test("adds a selected result and resets search", async () => {
-  const book: Book = {
+  const book: SearchBook = {
     id: "dune",
     title: "Dune",
     author: "Frank Herbert",
+    kind: "page",
+    format: "unspecified",
+    source: "google_books",
+    work_key: "dune|frank herbert|und",
     page_count: 412,
     cover_url: null,
   };
@@ -55,9 +59,15 @@ test("adds a selected result and resets search", async () => {
   await waitFor(() => expect(view.getByText("Dune")).toBeTruthy(), {
     timeout: 700,
   });
-  fireEvent.click(view.getByRole("button", { name: /Dune/ }));
+  fireEvent.click(view.getByRole("button", { name: /Edition.*412 pages/ }));
 
-  await waitFor(() => expect(onAdd).toHaveBeenCalledWith(book));
+  const { source: _source, work_key: _workKey, ...selected } = book;
+  await waitFor(() =>
+    expect(onAdd).toHaveBeenCalledWith({
+      ...selected,
+      id: "google_books:dune",
+    }),
+  );
   expect(input.value).toBe("");
   expect(view.queryByText("Dune")).toBeNull();
 });
@@ -92,6 +102,10 @@ test.each(["results", "empty", "error"])(
                   id: "dune",
                   title: "Dune",
                   author: "Frank Herbert",
+                  kind: "page",
+                  format: "unspecified",
+                  source: "google_books",
+                  work_key: "dune|frank herbert|und",
                   page_count: 412,
                   cover_url: null,
                 },
@@ -129,6 +143,8 @@ test("adds a manual book and clears the form", () => {
     id: expect.stringMatching(/^manual-/),
     title: "House of Leaves",
     author: "Manual entry",
+    kind: "page",
+    format: "unspecified",
     page_count: 709,
     cover_url: null,
   });
@@ -138,10 +154,14 @@ test("adds a manual book and clears the form", () => {
 });
 
 test("keeps an edition without pages and asks for its count before adding", async () => {
-  const edition = {
+  const edition: SearchBook = {
     id: "edition",
     title: "Katábasis",
     author: "R. F. Kuang",
+    kind: "page",
+    format: "unspecified",
+    source: "open_library",
+    work_key: "katabasis|r f kuang|pt",
     page_count: null,
     cover_url: "https://covers.openlibrary.org/edition.jpg",
     isbn: "9788551012239",
@@ -162,12 +182,19 @@ test("keeps an edition without pages and asks for its count before adding", asyn
   await waitFor(() => expect(view.getByText("Katábasis")).toBeTruthy(), {
     timeout: 1000,
   });
-  fireEvent.click(view.getByRole("button", { name: /Katábasis/ }));
+  fireEvent.click(
+    view.getByRole("button", { name: /Edition.*Pages not listed/ }),
+  );
   expect(onAdd).not.toHaveBeenCalled();
   fireEvent.input(view.getByLabelText("Pages"), { target: { value: "480" } });
   fireEvent.click(view.getByRole("button", { name: "Add edition" }));
+  const { source: _source, work_key: _workKey, ...selected } = edition;
   await waitFor(() =>
-    expect(onAdd).toHaveBeenCalledWith({ ...edition, page_count: 480 }),
+    expect(onAdd).toHaveBeenCalledWith({
+      ...selected,
+      id: "open_library:edition",
+      page_count: 480,
+    }),
   );
   expect(view.queryByRole("button", { name: "Add edition" })).toBeNull();
 });
@@ -180,6 +207,10 @@ test("searches the typed title without a language selector or restriction", asyn
           id: query,
           title: query,
           author: "Author",
+          kind: "page",
+          format: "unspecified",
+          source: "google_books",
+          work_key: "",
           page_count: 100,
           cover_url: null,
         },
@@ -188,7 +219,7 @@ test("searches the typed title without a language selector or restriction", asyn
     }),
   );
   const view = render(<BookSearch onAdd={() => {}} searchBooks={search} />);
-  expect(view.queryByRole("combobox")).toBeNull();
+  expect(view.queryByRole("combobox", { name: "Language" })).toBeNull();
   const input = view.getByLabelText("Search books");
   fireEvent.input(input, { target: { value: "Antes que o cafe esfrie" } });
   await waitFor(() =>

@@ -45,6 +45,10 @@ def normalize(item: dict) -> BookResult | None:
         None,
     )
     return BookResult(
+        source="google_books",
+        format="digital"
+        if isinstance(item.get("saleInfo"), dict) and item["saleInfo"].get("isEbook") is True
+        else "unspecified",
         id=book_id,
         title=title,
         author=first_author(authors),

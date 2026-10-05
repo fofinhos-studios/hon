@@ -3,14 +3,16 @@ import "../test/setup";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, describe, expect, test } from "vitest";
 import { addReadingDays, todayISO } from "../domain/schedule";
-import type { Book, DayOfWeek } from "../types";
+import type { DayOfWeek, PageBook } from "../types";
 import { ReadingPlanner } from "./reading-planner";
 
-const books: Book[] = [
+const books: PageBook[] = [
   {
     id: "a",
     title: "Test Book",
     author: "Test Author",
+    kind: "page",
+    format: "unspecified",
     page_count: 100,
     cover_url: null,
   },

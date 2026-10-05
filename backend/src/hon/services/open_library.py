@@ -38,6 +38,7 @@ def normalize(doc: dict) -> BookResult | None:
     publishers = edition.get("publisher") or []
     dates = edition.get("publish_date") or []
     return BookResult(
+        source="open_library",
         id=key.removeprefix("/books/").removeprefix("/works/"),
         title=title,
         author=first_author(doc.get("author_name")),
@@ -108,6 +109,13 @@ async def search(query: str) -> list[BookResult]:
                     response.raise_for_status()
                     data = decode_json_object(response, "OpenLibrary edition")
                     book.page_count = positive_page_count(data.get("number_of_pages"))
+                    physical_format = str(data.get("physical_format") or "").casefold()
+                    if any(
+                        word in physical_format for word in ("hardcover", "paperback", "hardback", "paper", "cloth")
+                    ):
+                        book.format = "physical"
+                    elif any(word in physical_format for word in ("ebook", "e-book", "digital", "epub")):
+                        book.format = "digital"
                 except httpx.HTTPError:
                     pass
                 if book.author == "Unknown" and book.isbn:

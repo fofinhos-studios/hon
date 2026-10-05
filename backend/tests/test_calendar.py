@@ -56,6 +56,26 @@ def test_english_titles_and_plain_feed(client):
     assert str(events(feed)[0]["summary"]).startswith("5 pp • ")
 
 
+def test_v2_mixed_units_and_v1_page_only_feed(client):
+    old = snapshot("en")
+    mixed = snapshot("en")
+    mixed["v"] = 2
+    mixed["events"] = [[0, 0, 5, "pages"], [0, 1, 30, "minutes"]]
+    old_response = client.get("/calendar/ics", params={"payload": payload(old), "encoding": "plain"})
+    new_response = client.get("/calendar/ics", params={"payload": payload(mixed), "encoding": "plain"})
+    assert old_response.status_code == new_response.status_code == 200
+    assert str(events(old_response)[0]["summary"]) == "5 pp • Água, Vento; Luz"
+    assert [str(event["summary"]) for event in events(new_response)] == [
+        "5 pp • Água, Vento; Luz",
+        "30 min • Outro livro",
+    ]
+    mixed["locale"] = "pt-BR"
+    localized = client.post("/calendar/ics", json=mixed)
+    assert str(events(localized)[1]["summary"]) == "30 min • Outro livro"
+    mixed["events"] = [[0, 0, 5]]
+    assert client.post("/calendar/ics", json=mixed).status_code == 422
+
+
 def test_download_accepts_a_title_too_long_for_a_portable_url(client):
     data = snapshot()
     data["books"][0] = "A" * 7000

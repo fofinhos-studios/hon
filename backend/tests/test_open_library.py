@@ -81,8 +81,7 @@ async def test_global_and_regional_editions_are_combined():
 async def test_one_edition_pass_survives_the_other_timing_out(failed_pass):
     client = async_client()
     client.get.side_effect = [
-        httpx.ReadTimeout("timeout") if index == failed_pass else response({"docs": [document()]})
-        for index in range(2)
+        httpx.ReadTimeout("timeout") if index == failed_pass else response({"docs": [document()]}) for index in range(2)
     ]
     with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
         assert len(await search("dune")) == 1

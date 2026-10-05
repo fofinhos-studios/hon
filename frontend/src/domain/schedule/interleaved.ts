@@ -5,7 +5,11 @@ import type {
   ReadingSession,
   ScheduleResult,
 } from "../../types";
-import { remainingPages, totalRemainingPages } from "./book-progress";
+import {
+  remainingUnits,
+  totalRemainingMinutes,
+  totalRemainingPages,
+} from "./book-progress";
 import { firstReadingDay, nextReadingDayAfter } from "./dates";
 
 function allocateWeightedPages(remaining: number[], budget: number): number[] {
@@ -42,15 +46,16 @@ export function calculateInterleavedSchedule(
   readingDays: DayOfWeek[],
   pagesPerDay: number,
   startDateISO: string,
+  minutesPerDay = 30,
 ): ScheduleResult {
   const firstDay = firstReadingDay(startDateISO, readingDays);
   const sessions: ReadingSession[] = [];
   const states = books.map((book) => ({
     book,
-    remaining: remainingPages(book),
+    remaining: remainingUnits(book),
     startDate: "",
     finishDate: "",
-    assignedPages: 0,
+    assignedUnits: 0,
     readingDays: 0,
   }));
   let currentDay = firstDay;
@@ -60,25 +65,44 @@ export function calculateInterleavedSchedule(
     const active = states.flatMap((state, index) =>
       state.remaining > 0 ? [index] : [],
     );
-    const allocations = allocateWeightedPages(
-      active.map((index) => states[index].remaining),
-      pagesPerDay,
-    );
-    active.forEach((stateIndex, allocationIndex) => {
-      const allocation = allocations[allocationIndex] ?? 0;
-      if (allocation <= 0) return;
+    const allocations = new Map<number, number>();
+    for (const kind of ["page", "audiobook"] as const) {
+      const matching = active.filter(
+        (index) => states[index].book.kind === kind,
+      );
+      const shares = allocateWeightedPages(
+        matching.map((index) => states[index].remaining),
+        kind === "page" ? pagesPerDay : minutesPerDay,
+      );
+      matching.forEach((index, position) =>
+        allocations.set(index, shares[position] ?? 0),
+      );
+    }
+    for (const stateIndex of active) {
+      const allocation = allocations.get(stateIndex) ?? 0;
+      if (allocation <= 0) continue;
       const state = states[stateIndex];
-      sessions.push({
-        date: currentDay,
-        book_id: state.book.id,
-        pages: allocation,
-      });
+      sessions.push(
+        state.book.kind === "page"
+          ? {
+              date: currentDay,
+              book_id: state.book.id,
+              kind: "page",
+              pages: allocation,
+            }
+          : {
+              date: currentDay,
+              book_id: state.book.id,
+              kind: "audiobook",
+              minutes: allocation,
+            },
+      );
       state.startDate ||= currentDay;
       state.remaining -= allocation;
-      state.assignedPages += allocation;
+      state.assignedUnits += allocation;
       state.readingDays += 1;
       state.finishDate = currentDay;
-    });
+    }
     readingDayCount += 1;
     if (states.every((state) => state.remaining === 0)) break;
     currentDay = nextReadingDayAfter(currentDay, readingDays);
@@ -88,15 +112,17 @@ export function calculateInterleavedSchedule(
     book: state.book,
     start_date: state.startDate || firstDay,
     finish_date: state.finishDate || firstDay,
-    daily_pages:
-      state.readingDays > 0
-        ? Math.round(state.assignedPages / state.readingDays)
-        : undefined,
+    ...(state.readingDays > 0
+      ? state.book.kind === "page"
+        ? { daily_pages: Math.round(state.assignedUnits / state.readingDays) }
+        : { daily_minutes: Math.round(state.assignedUnits / state.readingDays) }
+      : {}),
   }));
   return {
     books: schedules,
     sessions,
     total_pages: totalRemainingPages(books),
+    total_minutes: totalRemainingMinutes(books),
     total_reading_days: readingDayCount,
     finish_date: schedules.reduce(
       (latest, schedule) =>

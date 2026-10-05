@@ -8,6 +8,7 @@ interface Props {
   bookCount: number;
   noDaysWarning: boolean;
   pagesPerDay: number;
+  minutesPerDay?: number;
   method: ReadingMethod;
   schedule: ScheduleResult | null;
   onReorder: (books: Book[]) => void;
@@ -18,6 +19,7 @@ export function ScheduleSection({
   bookCount,
   noDaysWarning,
   pagesPerDay,
+  minutesPerDay = 30,
   method,
   schedule,
   onReorder,
@@ -43,6 +45,7 @@ export function ScheduleSection({
           books={books}
           result={schedule}
           pagesPerDay={pagesPerDay}
+          minutesPerDay={minutesPerDay}
           method={method}
           onReorder={onReorder}
         />

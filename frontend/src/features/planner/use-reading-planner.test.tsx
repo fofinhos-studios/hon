@@ -2,22 +2,24 @@ import "../../test/setup";
 
 import { cleanup, render } from "@testing-library/preact";
 import { afterEach, expect, test } from "vitest";
-import type { Book, ScheduleResult } from "../../types";
+import type { PageBook, ScheduleResult } from "../../types";
 import { useReadingPlanner } from "./use-reading-planner";
 
 afterEach(cleanup);
 
-const book: Book = {
+const book: PageBook = {
   id: "a",
   title: "Book",
   author: "Author",
+  kind: "page",
+  format: "unspecified",
   page_count: 100,
   cover_url: null,
 };
 
 test("visual enrichment does not recalculate reading dates", () => {
   let schedule: ScheduleResult | null = null;
-  function Harness({ books }: { books: Book[] }) {
+  function Harness({ books }: { books: PageBook[] }) {
     schedule = useReadingPlanner(books).schedule;
     return null;
   }

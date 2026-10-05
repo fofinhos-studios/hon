@@ -194,7 +194,12 @@ async function parseError(
 
 export interface SearchResult {
   books: SearchBook[];
-  source: "google_books" | "open_library" | "bookinfo" | "combined";
+  source:
+    | "google_books"
+    | "open_library"
+    | "bookinfo"
+    | "audiosilo"
+    | "combined";
   partial?: boolean;
 }
 

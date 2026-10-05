@@ -5,7 +5,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from hon.models.book import BookResult
+from hon.models.book import AudiobookResult, BookResult
 from hon.routers.books import _cache
 
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
@@ -18,8 +18,9 @@ def catalogs():
         patch("hon.routers.books.search_google_books", AsyncMock(return_value=[])) as google,
         patch("hon.routers.books.search_open_library", AsyncMock(return_value=[])) as library,
         patch("hon.routers.books.search_bookinfo", AsyncMock(return_value=[])) as bookinfo,
+        patch("hon.routers.books.search_audiosilo", AsyncMock(return_value=[])) as audio,
     ):
-        yield google, library, bookinfo
+        yield google, library, bookinfo, audio
     _cache.clear()
 
 
@@ -28,7 +29,7 @@ def test_health_reports_service_status(client: TestClient):
 
 
 def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient, catalogs):
-    google, library, bookinfo = catalogs
+    google, library, bookinfo, _ = catalogs
     google.return_value = [BOOK]
     bookinfo.return_value = [BOOK.model_copy(update={"id": "2", "publisher": "Other edition"})]
     response = client.get("/books/search?q=dune")
@@ -39,7 +40,7 @@ def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient
 
 
 def test_search_survives_a_provider_failure(client: TestClient, catalogs):
-    google, library, _ = catalogs
+    google, library, _, _ = catalogs
     google.side_effect = httpx.DecodingError("bad")
     library.return_value = [BOOK]
     response = client.get("/books/search?q=dune")
@@ -80,6 +81,41 @@ def test_search_has_no_implicit_language_filter(client: TestClient, catalogs):
     catalogs[2].return_value = [BOOK.model_copy(update={"id": "pt", "language": "pt"})]
     response = client.get("/books/search", params={"q": "dune"})
     assert {b["language"] for b in response.json()["books"]} == {"en", "pt"}
+
+
+def test_search_groups_languages_and_keeps_distinct_recordings(client: TestClient, catalogs):
+    page = BOOK.model_copy(update={"id": "print", "source": "google_books", "language": "en"})
+    audio = AudiobookResult(
+        id="audiosilo:work:recording-1",
+        title="Dune",
+        author="Frank Herbert",
+        duration_minutes=300,
+        cover_url=None,
+        language="en",
+        isbn="9780441172719",
+    )
+    catalogs[0].return_value = [page]
+    catalogs[3].return_value = [
+        audio,
+        audio.model_copy(update={"id": "audiosilo:work:recording-2", "duration_minutes": 330}),
+    ]
+    catalogs[2].return_value = [page.model_copy(update={"id": "pt", "language": "pt", "source": "bookinfo"})]
+    response = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    editions = response.json()["books"]
+    assert len(editions) == 4
+    assert len({book["id"] for book in editions if book["kind"] == "audiobook"}) == 2
+    assert len({book["work_key"] for book in editions}) == 2
+    assert all(book["format"] == "unspecified" for book in editions if book["kind"] == "page")
+
+
+def test_search_survives_audio_outage(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK]
+    catalogs[3].side_effect = httpx.ReadTimeout("audio unavailable")
+    response = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    assert response.json()["partial"] is True
+    assert response.json()["books"][0]["kind"] == "page"
 
 
 def test_search_enforces_total_deadline(client: TestClient, catalogs):

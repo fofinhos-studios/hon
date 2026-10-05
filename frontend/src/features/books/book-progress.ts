@@ -21,12 +21,19 @@ export function pagesFromPercent(
 }
 
 export function totalBookPages(books: Book[]): number {
-  return books.reduce((sum, book) => sum + book.page_count, 0);
+  return books.reduce(
+    (sum, book) => sum + (book.kind === "page" ? book.page_count : 0),
+    0,
+  );
 }
 
 export function totalRemainingBookPages(books: Book[]): number {
   return books.reduce(
-    (sum, book) => sum + Math.max(0, book.page_count - (book.pages_read ?? 0)),
+    (sum, book) =>
+      sum +
+      (book.kind === "page"
+        ? Math.max(0, book.page_count - (book.pages_read ?? 0))
+        : 0),
     0,
   );
 }

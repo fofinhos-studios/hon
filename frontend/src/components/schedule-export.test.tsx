@@ -72,12 +72,12 @@ test("copies the fixed feed URL and downloads the same schedule", async () => {
     "https://hon.fofinhos.studio/api/calendar/ics?payload=example",
   );
   expect(vi.mocked(createCalendarUrl).mock.calls[0][0].events).toEqual([
-    [0, 0, 10],
+    [0, 0, 10, "pages"],
   ]);
   fireEvent.click(view.getByRole("button", { name: "Download .ics" }));
   await waitFor(() => expect(downloadCalendar).toHaveBeenCalledTimes(1));
   expect(vi.mocked(downloadCalendar).mock.calls[0][0].events).toEqual([
-    [0, 0, 10],
+    [0, 0, 10, "pages"],
   ]);
 });
 

@@ -22,6 +22,7 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualPages, setManualPages] = useState("");
+  const [manualKind, setManualKind] = useState<"page" | "audiobook">("page");
   const [pendingBook, setPendingBook] = useState<SearchBook | null>(null);
   const [editionPages, setEditionPages] = useState("");
   const editionInput = useRef<HTMLInputElement>(null);
@@ -43,18 +44,34 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
     manualPageCount > 0;
 
   const handleAdd = async (book: SearchBook) => {
-    if (!book.page_count) {
+    const quantity =
+      book.kind === "page" ? book.page_count : book.duration_minutes;
+    if (!quantity) {
       setPendingBook(book);
       setEditionPages("");
       search.reset();
       return;
     }
     const visuals = await getBookVisuals(book).catch(() => undefined);
-    onAdd({
-      ...book,
-      page_count: book.page_count,
-      ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
-    });
+    const { source: _source, work_key: _workKey, ...edition } = book;
+    const savedId = edition.id.startsWith(`${book.source}:`)
+      ? edition.id
+      : `${book.source}:${edition.id}`;
+    if (edition.kind === "page" && edition.page_count) {
+      onAdd({
+        ...edition,
+        id: savedId,
+        page_count: edition.page_count,
+        ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
+      });
+    } else if (edition.kind === "audiobook" && edition.duration_minutes) {
+      onAdd({
+        ...edition,
+        id: savedId,
+        duration_minutes: edition.duration_minutes,
+        ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
+      });
+    }
     setPendingBook(null);
     search.reset();
     searchInput.current?.focus();
@@ -65,13 +82,27 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
     const title = manualTitle.trim();
     if (!canAddManual) return;
 
-    onAdd({
+    const base = {
       id: `manual-${Date.now()}-${crypto.randomUUID()}`,
       title,
       author: "Manual entry",
-      page_count: manualPageCount,
       cover_url: null,
-    });
+    };
+    onAdd(
+      manualKind === "page"
+        ? {
+            ...base,
+            kind: "page",
+            format: "unspecified",
+            page_count: manualPageCount,
+          }
+        : {
+            ...base,
+            kind: "audiobook",
+            duration_minutes: manualPageCount,
+            narrators: [],
+          },
+    );
     setManualTitle("");
     setManualPages("");
     setManualOpen(false);
@@ -151,6 +182,19 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
             aria-label={copy.search.manualForm}
           >
             <div class="book-search__manual-grid">
+              <select
+                class="hon-input"
+                aria-label={copy.search.format}
+                value={manualKind}
+                onChange={(event) =>
+                  setManualKind(
+                    event.currentTarget.value as "page" | "audiobook",
+                  )
+                }
+              >
+                <option value="page">{copy.search.pageBook}</option>
+                <option value="audiobook">{copy.search.audiobook}</option>
+              </select>
               <input
                 class="hon-input"
                 ref={manualInput}
@@ -168,12 +212,20 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
                 min="1"
                 step="1"
                 inputMode="numeric"
-                placeholder={copy.search.pages}
+                placeholder={
+                  manualKind === "page"
+                    ? copy.search.pages
+                    : copy.search.duration
+                }
                 value={manualPages}
                 onInput={(e) =>
                   setManualPages((e.target as HTMLInputElement).value)
                 }
-                aria-label={copy.search.numberOfPages}
+                aria-label={
+                  manualKind === "page"
+                    ? copy.search.numberOfPages
+                    : copy.search.duration
+                }
               />
               <button
                 class="hon-btn hon-btn--accent book-search__manual-submit"
@@ -218,14 +270,24 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
             class="book-search__edition"
             onSubmit={(event) => {
               event.preventDefault();
-              const pages = Number(editionPages);
-              if (!Number.isSafeInteger(pages) || pages < 1) return;
-              handleAdd({ ...pendingBook, page_count: pages });
+              const quantity = Number(editionPages);
+              if (!Number.isSafeInteger(quantity) || quantity < 1) return;
+              handleAdd(
+                pendingBook.kind === "page"
+                  ? { ...pendingBook, page_count: quantity }
+                  : { ...pendingBook, duration_minutes: quantity },
+              );
             }}
           >
-            <p>{copy.search.enterPages(pendingBook.title)}</p>
+            <p>
+              {pendingBook.kind === "page"
+                ? copy.search.enterPages(pendingBook.title)
+                : copy.search.enterDuration(pendingBook.title)}
+            </p>
             <label>
-              {copy.search.pages}
+              {pendingBook.kind === "page"
+                ? copy.search.pages
+                : copy.search.duration}
               <input
                 class="hon-input"
                 ref={editionInput}

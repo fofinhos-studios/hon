@@ -2,7 +2,7 @@ import "../test/setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { calculateSchedule } from "../domain/schedule";
-import { makeBook } from "../domain/schedule/test-fixtures";
+import { makeAudiobook, makeBook } from "../domain/schedule/test-fixtures";
 import {
   CalendarUrlTooLongError,
   createCalendarSnapshot,
@@ -25,10 +25,27 @@ describe("calendar export snapshot", () => {
     expect(snapshot.start_date).toBe("2026-01-07");
     expect(snapshot.books).toEqual(["first", "second"]);
     expect(snapshot.events).toEqual([
-      [0, 0, 2],
-      [0, 1, 1],
-      [2, 0, 2],
-      [2, 1, 1],
+      [0, 0, 2, "pages"],
+      [0, 1, 1, "pages"],
+      [2, 0, 2, "pages"],
+      [2, 1, 1, "pages"],
+    ]);
+  });
+
+  test("exports minutes and pages in version 2 events", () => {
+    const schedule = calculateSchedule(
+      [makeBook("print", 10), makeAudiobook("audio", 30)],
+      [0, 1, 2, 3, 4, 5, 6],
+      10,
+      "interleaved",
+      "2026-01-05",
+      30,
+    );
+    const snapshot = createCalendarSnapshot(schedule, "en");
+    expect(snapshot.v).toBe(2);
+    expect(snapshot.events).toEqual([
+      [0, 0, 10, "pages"],
+      [0, 1, 30, "minutes"],
     ]);
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Book } from "../../types";
+import type { Book, PageBook } from "../../types";
 import { loadBooks, saveBooks } from "./book-storage";
 
 const books: Book[] = [
@@ -7,6 +7,8 @@ const books: Book[] = [
     id: "dune",
     title: "Dune",
     author: "Frank Herbert",
+    kind: "page",
+    format: "unspecified",
     page_count: 412,
     cover_url: null,
     pages_read: 100,
@@ -62,5 +64,36 @@ describe("book storage", () => {
     };
 
     expect(loadBooks(adapter)).toEqual(books);
+  });
+
+  test("migrates a legacy page book without changing its identity or progress", () => {
+    const { kind: _kind, format: _format, ...legacy } = books[0] as PageBook;
+    const adapter = {
+      getItem: () => JSON.stringify([legacy]),
+      setItem: () => {},
+    };
+    expect(loadBooks(adapter)).toEqual(books);
+  });
+
+  test("round trips audiobook duration and listening progress", () => {
+    const audio: Book = {
+      id: "audiosilo:w1:r1",
+      title: "Dune",
+      author: "Frank Herbert",
+      kind: "audiobook",
+      duration_minutes: 300,
+      minutes_listened: 75,
+      narrators: ["Reader"],
+      cover_url: null,
+    };
+    let serialized = "";
+    const adapter = {
+      getItem: () => serialized,
+      setItem: (_key: string, value: string) => {
+        serialized = value;
+      },
+    };
+    saveBooks(adapter, [audio]);
+    expect(loadBooks(adapter)).toEqual([audio]);
   });
 });

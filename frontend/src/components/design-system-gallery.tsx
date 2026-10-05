@@ -1,12 +1,14 @@
 import { useState } from "preact/hooks";
 import { BookCard } from "../features/books/book-card";
 import { BookSearchStatus } from "../features/books/book-search-status";
-import type { Book, DayOfWeek } from "../types";
+import type { DayOfWeek, PageBook } from "../types";
 import { DayPicker } from "./day-picker";
 import { Icon, type IconName } from "./icon";
 import { Tooltip } from "./tooltip";
 
-const sample: Book = {
+const sample: PageBook = {
+  kind: "page",
+  format: "unspecified",
   id: "gallery",
   title: "The Shape of a Reading Day",
   author: "Hon design system",

@@ -1,4 +1,4 @@
-import type { Book, BookVisuals } from "../../types";
+import type { Book, BookVisuals, PageBook } from "../../types";
 
 const STORAGE_KEY = "hon.books";
 
@@ -9,15 +9,51 @@ interface StorageAdapter {
 
 function isBook(value: unknown): value is Book {
   if (!value || typeof value !== "object") return false;
-  const book = value as Partial<Book>;
-  return (
+  const book = value as Record<string, unknown>;
+  const common =
     typeof book.id === "string" &&
     typeof book.title === "string" &&
     typeof book.author === "string" &&
-    typeof book.page_count === "number" &&
     (book.cover_url === null || typeof book.cover_url === "string") &&
-    (book.pages_read === undefined || typeof book.pages_read === "number")
+    (book.kind === "page" || book.kind === "audiobook");
+  if (!common) return false;
+  if (book.kind === "audiobook") {
+    const duration = book.duration_minutes;
+    const listened = book.minutes_listened;
+    return (
+      typeof duration === "number" &&
+      Number.isSafeInteger(duration) &&
+      duration > 0 &&
+      Array.isArray(book.narrators) &&
+      book.narrators.every((name) => typeof name === "string") &&
+      (listened === undefined ||
+        (typeof listened === "number" &&
+          Number.isSafeInteger(listened) &&
+          listened >= 0 &&
+          listened <= duration))
+    );
+  }
+  const pages = book.page_count;
+  const read = book.pages_read;
+  return (
+    typeof pages === "number" &&
+    Number.isSafeInteger(pages) &&
+    pages > 0 &&
+    typeof book.format === "string" &&
+    ["physical", "digital", "unspecified"].includes(book.format) &&
+    (read === undefined ||
+      (typeof read === "number" &&
+        Number.isSafeInteger(read) &&
+        read >= 0 &&
+        read <= pages))
   );
+}
+
+function migrateLegacyBook(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const book = value as Partial<PageBook>;
+  if (book.kind !== undefined) return value;
+  return { ...book, kind: "page", format: "unspecified" };
 }
 
 function validVisuals(value: unknown): value is BookVisuals {
@@ -51,8 +87,9 @@ export function loadBooks(storage: StorageAdapter): Book[] {
           Array.isArray(value.books)
         ? value.books
         : [];
-    return books.every(isBook)
-      ? books.map((book) => {
+    const migrated = books.map(migrateLegacyBook);
+    return migrated.every(isBook)
+      ? migrated.map((book) => {
           const { visuals, visuals_checked_at, background_hidden, ...rest } =
             book;
           return {

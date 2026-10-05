@@ -2,7 +2,7 @@ import "../../test/setup";
 
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, describe, expect, test } from "vitest";
-import type { Book } from "../../types";
+import type { PageBook } from "../../types";
 import { usePersistentBooks } from "./use-persistent-books";
 
 afterEach(() => {
@@ -10,10 +10,12 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const book: Book = {
+const book: PageBook = {
   id: "dune",
   title: "Dune",
   author: "Frank Herbert",
+  kind: "page",
+  format: "unspecified",
   page_count: 412,
   cover_url: null,
 };
@@ -35,7 +37,11 @@ function Harness() {
       <button type="button" onClick={() => reorderBooks([...books].reverse())}>
         Reorder
       </button>
-      <span>{books[0]?.pages_read ?? books.length}</span>
+      <span>
+        {books[0]?.kind === "page"
+          ? (books[0].pages_read ?? books.length)
+          : books.length}
+      </span>
     </>
   );
 }

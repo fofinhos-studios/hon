@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { calculateInterleavedSchedule } from "./interleaved";
-import { EVERY_DAY, makeBook } from "./test-fixtures";
+import { EVERY_DAY, makeAudiobook, makeBook } from "./test-fixtures";
 
 describe("interleaved schedule", () => {
   test("shares weighted daily budget across active books", () => {
@@ -34,13 +34,35 @@ describe("interleaved schedule", () => {
       "2026-01-06",
     );
     expect(result.sessions).toEqual([
-      { date: "2026-01-07", book_id: "first", pages: 2 },
-      { date: "2026-01-07", book_id: "second", pages: 1 },
-      { date: "2026-01-09", book_id: "first", pages: 2 },
-      { date: "2026-01-09", book_id: "second", pages: 1 },
+      { date: "2026-01-07", book_id: "first", kind: "page", pages: 2 },
+      { date: "2026-01-07", book_id: "second", kind: "page", pages: 1 },
+      { date: "2026-01-09", book_id: "first", kind: "page", pages: 2 },
+      { date: "2026-01-09", book_id: "second", kind: "page", pages: 1 },
     ]);
     expect(
-      result.sessions.reduce((sum, session) => sum + session.pages, 0),
+      result.sessions.reduce(
+        (sum, session) => sum + (session.kind === "page" ? session.pages : 0),
+        0,
+      ),
     ).toBe(result.total_pages);
+  });
+
+  test("spends page and minute budgets independently on the same day", () => {
+    const result = calculateInterleavedSchedule(
+      [makeBook("print", 20), makeAudiobook("audio", 60)],
+      EVERY_DAY,
+      10,
+      "2026-01-05",
+      30,
+    );
+    expect(result.sessions).toEqual([
+      { date: "2026-01-05", book_id: "print", kind: "page", pages: 10 },
+      { date: "2026-01-05", book_id: "audio", kind: "audiobook", minutes: 30 },
+      { date: "2026-01-06", book_id: "print", kind: "page", pages: 10 },
+      { date: "2026-01-06", book_id: "audio", kind: "audiobook", minutes: 30 },
+    ]);
+    expect(result.total_reading_days).toBe(2);
+    expect(result.total_pages).toBe(20);
+    expect(result.total_minutes).toBe(60);
   });
 });

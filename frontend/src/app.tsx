@@ -78,6 +78,8 @@ function AppContent() {
               onRemove={library.removeBook}
               onUpdateProgress={library.updateProgress}
               onUpdatePageCount={library.updatePageCount}
+              onUpdateDuration={library.updateDuration}
+              onUpdateListeningProgress={library.updateListeningProgress}
             />
           </section>
           <aside
@@ -90,6 +92,7 @@ function AppContent() {
               bookCount={library.books.length}
               noDaysWarning={planner.noDaysWarning}
               pagesPerDay={planner.pagesPerDay}
+              minutesPerDay={planner.minutesPerDay}
               method={planner.method}
               schedule={planner.schedule}
               onReorder={library.reorderBooks}

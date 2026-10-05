@@ -9,9 +9,10 @@ from fastapi.responses import RedirectResponse
 
 from hon.models.book import SearchResult
 from hon.models.visuals import BookVisuals, VisualRequest
+from hon.services.audiosilo import search as search_audiosilo
 from hon.services.book_visuals import get_visuals
 from hon.services.bookinfo import search as search_bookinfo
-from hon.services.catalog import folded, isbn_value, rank_books
+from hon.services.catalog import folded, isbn_value, rank_books, work_key
 from hon.services.google_books import search as search_google_books
 from hon.services.open_library import search as search_open_library
 from hon.services.publisher_cover import get_publisher_cover
@@ -69,6 +70,7 @@ async def _search_catalogs(query: str) -> SearchResult:
         ("bookinfo", search_bookinfo),
         ("google_books", search_google_books),
         ("open_library", search_open_library),
+        ("audiosilo", search_audiosilo),
     ]
 
     async def run(search):
@@ -88,7 +90,7 @@ async def _search_catalogs(query: str) -> SearchResult:
         elif result:
             books.extend(result)
             sources.append(name)
-    ranked = rank_books(query, books)
+    ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in rank_books(query, books)]
     if not books and errors:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")

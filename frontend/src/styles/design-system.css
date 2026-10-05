@@ -676,7 +676,7 @@ ul {
 }
 .book-search__manual-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5.5rem auto auto;
+  grid-template-columns: 8rem minmax(0, 1fr) 5.5rem auto auto;
   gap: var(--space-2);
   align-items: start;
 }
@@ -688,6 +688,27 @@ ul {
   margin-top: var(--space-3);
   max-height: 24rem;
   overflow-y: auto;
+}
+.book-search__work + .book-search__work {
+  border-top: var(--rule);
+}
+.book-search__work-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-subtle);
+  font-size: var(--text-xs);
+}
+.book-search__work-heading strong {
+  font-size: var(--text-sm);
+}
+.book-search__work-heading span {
+  color: var(--muted-ink);
+}
+.book-search__editions {
+  padding-left: var(--space-3);
 }
 .book-search__result {
   display: flex;
@@ -1433,7 +1454,8 @@ ul {
   .book-search__manual-grid {
     grid-template-columns: minmax(5.5rem, 1fr) auto auto;
   }
-  .book-search__manual-grid > input:first-child {
+  .book-search__manual-grid > select,
+  .book-search__manual-grid > input[type="text"] {
     grid-column: 1 / -1;
   }
   .book-search__manual-pages {

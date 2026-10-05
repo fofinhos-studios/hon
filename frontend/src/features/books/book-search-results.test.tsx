@@ -11,6 +11,10 @@ const book: SearchBook = {
   id: "dune",
   title: "Dune",
   author: "Frank Herbert",
+  kind: "page",
+  format: "unspecified",
+  source: "google_books",
+  work_key: "dune|frank herbert|und",
   page_count: 412,
   cover_url: null,
 };
@@ -22,7 +26,7 @@ describe("BookSearchResults", () => {
       <BookSearchResults results={[book]} onSelect={onSelect} />,
     );
 
-    fireEvent.click(view.getByRole("button", { name: /Dune/ }));
+    fireEvent.click(view.getByRole("button", { name: /Edition.*412 pages/ }));
 
     expect(onSelect).toHaveBeenCalledWith(book);
   });
@@ -42,7 +46,48 @@ describe("BookSearchResults", () => {
       />,
     );
 
-    expect(view.getByText(/Portuguese · Intrínseca/)).toBeTruthy();
+    expect(view.getByText("Portuguese")).toBeTruthy();
+    expect(view.getByText(/Intrínseca/)).toBeTruthy();
     expect(view.getByText("ISBN 9788551012239")).toBeTruthy();
+  });
+
+  test("nests selectable formats under a work and separates languages", () => {
+    const audio: SearchBook = {
+      ...book,
+      id: "recording",
+      kind: "audiobook",
+      source: "audiosilo",
+      duration_minutes: 300,
+      narrators: ["Reader"],
+    };
+    const digital: SearchBook = {
+      ...book,
+      id: "ebook",
+      format: "digital",
+      page_count: 550,
+    };
+    const portuguese: SearchBook = {
+      ...book,
+      id: "translation",
+      language: "pt",
+      work_key: "dune|frank herbert|pt",
+    };
+    const onSelect = vi.fn();
+    const view = render(
+      <BookSearchResults
+        results={[book, audio, digital, portuguese]}
+        onSelect={onSelect}
+      />,
+    );
+    expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
+      2,
+    );
+    expect(
+      view.container.querySelectorAll(
+        ".book-search__work:first-child .book-search__result-item",
+      ),
+    ).toHaveLength(3);
+    fireEvent.click(view.getByRole("button", { name: /Audiobook.*300/ }));
+    expect(onSelect).toHaveBeenCalledWith(audio);
   });
 });

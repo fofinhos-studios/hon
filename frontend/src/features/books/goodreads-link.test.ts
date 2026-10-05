@@ -6,6 +6,8 @@ const book: Book = {
   id: "manual-1",
   title: "Espelhos de água",
   author: "Samantha Sotto Yambao",
+  kind: "page",
+  format: "unspecified",
   page_count: 364,
   cover_url: null,
 };

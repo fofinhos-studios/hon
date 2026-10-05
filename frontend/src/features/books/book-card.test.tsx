@@ -2,15 +2,17 @@ import "../../test/setup";
 
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { Book } from "../../types";
+import type { PageBook } from "../../types";
 import { BookCard } from "./book-card";
 
 afterEach(cleanup);
 
-const book: Book = {
+const book: PageBook = {
   id: "a",
   title: "First Book",
   author: "Author",
+  kind: "page",
+  format: "unspecified",
   page_count: 100,
   cover_url: null,
 };

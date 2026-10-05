@@ -217,7 +217,7 @@ def test_color_groups_dominant_shades_instead_of_selecting_a_bright_detail(base_
     image.save(data, "PNG")
     color = visuals.dominant_color(data.getvalue())
     assert color is not None
-    rgb = tuple(int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    rgb = tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
     hue, _, _ = colorsys.rgb_to_hsv(*rgb)
     assert min(abs(hue - base_hue), 1 - abs(hue - base_hue)) < 0.05
 
@@ -230,6 +230,4 @@ async def test_download_accepts_large_publisher_cover_within_bounded_limit():
             lambda _: httpx.Response(200, content=data, headers={"content-type": "image/png"})
         )
     ) as client:
-        assert await visuals.download_cover(
-            client, "https://fl-storage.bookinfometadados.com.br/cover.png"
-        ) == data
+        assert await visuals.download_cover(client, "https://fl-storage.bookinfometadados.com.br/cover.png") == data

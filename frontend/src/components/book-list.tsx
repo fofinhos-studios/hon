@@ -7,6 +7,8 @@ interface Props {
   onRemove: (id: string) => void;
   onUpdateProgress: (id: string, pagesRead: number | undefined) => void;
   onUpdatePageCount: (id: string, pages: number) => void;
+  onUpdateDuration?: (id: string, minutes: number) => void;
+  onUpdateListeningProgress?: (id: string, minutes: number | undefined) => void;
 }
 
 export function BookList({
@@ -14,6 +16,8 @@ export function BookList({
   onRemove,
   onUpdateProgress,
   onUpdatePageCount,
+  onUpdateDuration,
+  onUpdateListeningProgress,
 }: Props) {
   if (books.length === 0) return <BookListEmpty />;
 
@@ -25,10 +29,16 @@ export function BookList({
             key={book.id}
             book={book}
             index={index}
-            onUpdatePageCount={(pages) => onUpdatePageCount(book.id, pages)}
+            onUpdatePageCount={(amount) =>
+              book.kind === "page"
+                ? onUpdatePageCount(book.id, amount)
+                : onUpdateDuration?.(book.id, amount)
+            }
             onRemove={() => onRemove(book.id)}
-            onUpdateProgress={(pagesRead) =>
-              onUpdateProgress(book.id, pagesRead)
+            onUpdateProgress={(amount) =>
+              book.kind === "page"
+                ? onUpdateProgress(book.id, amount)
+                : onUpdateListeningProgress?.(book.id, amount)
             }
           />
         ))}

@@ -7,6 +7,8 @@ const books: Book[] = ["a", "b", "c"].map((id) => ({
   id,
   title: id,
   author: "Author",
+  kind: "page",
+  format: "unspecified",
   page_count: 100,
   cover_url: null,
 }));

@@ -30,6 +30,7 @@ describe("schedule public API", () => {
       books: [],
       sessions: [],
       total_pages: 0,
+      total_minutes: 0,
       total_reading_days: 0,
       finish_date: "2026-01-05",
     });

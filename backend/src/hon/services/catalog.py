@@ -4,7 +4,7 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
-from hon.models.book import BookResult
+from hon.models.book import AudiobookResult, BookResult, SearchBook
 
 STOP_WORDS = {"a", "o", "as", "os", "de", "do", "da", "e", "que", "the", "of", "and", "in"}
 
@@ -32,7 +32,7 @@ def search_terms(query: str) -> list[str]:
     return terms or folded(query).split()
 
 
-def relevance(query: str, book: BookResult) -> float:
+def relevance(query: str, book: SearchBook) -> float:
     isbn = isbn_value(query)
     if isbn:
         return 1.0 if book.isbn == isbn else 0.0
@@ -58,20 +58,38 @@ def relevance(query: str, book: BookResult) -> float:
     return 0.89 * (0.7 * score + 0.3 * phrase_similarity)
 
 
-def rank_books(query: str, books: list[BookResult]) -> list[BookResult]:
-    unique: dict[str, BookResult] = {}
+def work_key(book: SearchBook) -> str:
+    title = re.sub(r"\s*\((?:unabridged|abridged|audiobook)\)\s*$", "", book.title, flags=re.I)
+    return "|".join((folded(title), folded(book.author), (book.language or "und").casefold()))
+
+
+def rank_books[T: BookResult | AudiobookResult](query: str, books: list[T]) -> list[T]:
+    unique: dict[tuple[str, str], T] = {}
     for book in books:
         if relevance(query, book) < 0.68:
             continue
-        identity = book.isbn or book.id
+        identity = (
+            book.kind,
+            book.id if isinstance(book, AudiobookResult) else book.isbn or f"{book.source}:{book.id}",
+        )
         if identity in unique:
             existing = unique[identity]
             # Only merge metadata for the same edition, never merely the same title.
             updates = {
                 key: getattr(book, key)
-                for key in ("cover_url", "cover_fallback_url", "page_count", "publisher", "published_date", "language")
+                for key in ("cover_url", "cover_fallback_url", "publisher", "published_date", "language")
                 if getattr(existing, key) is None and getattr(book, key) is not None
             }
+            if isinstance(existing, BookResult) and isinstance(book, BookResult):
+                if existing.page_count is None and book.page_count is not None:
+                    updates["page_count"] = book.page_count
+                if existing.format == "unspecified" and book.format != "unspecified":
+                    updates["format"] = book.format
+            if isinstance(existing, AudiobookResult) and isinstance(book, AudiobookResult):
+                if existing.duration_minutes is None and book.duration_minutes is not None:
+                    updates["duration_minutes"] = book.duration_minutes
+                if not existing.narrators and book.narrators:
+                    updates["narrators"] = book.narrators
             if existing.author == "Unknown" and book.author != "Unknown":
                 updates["author"] = book.author
             if existing.cover_url and book.cover_url and existing.cover_url != book.cover_url:
@@ -80,15 +98,15 @@ def rank_books(query: str, books: list[BookResult]) -> list[BookResult]:
         else:
             unique[identity] = book
 
-    def order(book: BookResult) -> tuple:
+    def order(book: T) -> tuple:
         brazilian = bool(book.isbn and book.isbn.startswith(("97885", "97865")))
         year = re.search(r"(?:19|20)\d{2}", book.published_date or "")
         return (
             relevance(query, book),
             brazilian,
             bool(book.cover_url),
-            bool(book.page_count),
+            bool(book.page_count if isinstance(book, BookResult) else book.duration_minutes),
             year.group() if year else "",
         )
 
-    return sorted(unique.values(), key=order, reverse=True)[:20]
+    return sorted(unique.values(), key=order, reverse=True)[:40]

@@ -16,12 +16,19 @@ export function calculateSchedule(
   pagesPerDay: number,
   method: ReadingMethod,
   startDateISO: string,
+  minutesPerDay = 30,
 ): ScheduleResult {
-  if (books.length === 0 || readingDays.length === 0 || pagesPerDay <= 0) {
+  if (
+    books.length === 0 ||
+    readingDays.length === 0 ||
+    pagesPerDay <= 0 ||
+    minutesPerDay <= 0
+  ) {
     return {
       books: [],
       sessions: [],
       total_pages: 0,
+      total_minutes: 0,
       total_reading_days: 0,
       finish_date: startDateISO,
     };
@@ -32,11 +39,13 @@ export function calculateSchedule(
         readingDays,
         pagesPerDay,
         startDateISO,
+        minutesPerDay,
       )
     : calculateSequentialSchedule(
         books,
         readingDays,
         pagesPerDay,
         startDateISO,
+        minutesPerDay,
       );
 }

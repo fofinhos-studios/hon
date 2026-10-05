@@ -2,12 +2,17 @@ import type { Locale } from "../i18n";
 import type { ScheduleResult } from "../types";
 
 export interface CalendarSnapshot {
-  v: 1;
+  v: 2;
   locale: Locale;
   created_at: string;
   start_date: string;
   books: string[];
-  events: [dayOffset: number, bookIndex: number, pages: number][];
+  events: [
+    dayOffset: number,
+    bookIndex: number,
+    amount: number,
+    unit: "pages" | "minutes",
+  ][];
 }
 
 export const MAX_CALENDAR_URL_LENGTH = 8192;
@@ -29,7 +34,7 @@ export function createCalendarSnapshot(
   const startMillis = Date.parse(`${startDate}T00:00:00Z`);
 
   return {
-    v: 1,
+    v: 2,
     locale,
     created_at: new Date().toISOString(),
     start_date: startDate,
@@ -42,7 +47,8 @@ export function createCalendarSnapshot(
           (Date.parse(`${session.date}T00:00:00Z`) - startMillis) / 86_400_000,
         ),
         bookIndex,
-        session.pages,
+        session.kind === "page" ? session.pages : session.minutes,
+        session.kind === "page" ? "pages" : "minutes",
       ];
     }),
   };

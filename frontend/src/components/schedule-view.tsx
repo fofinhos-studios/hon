@@ -18,6 +18,7 @@ interface Props {
   books: Book[];
   result: ScheduleResult;
   pagesPerDay: number;
+  minutesPerDay?: number;
   method: ReadingMethod;
   onReorder: (books: Book[]) => void;
 }
@@ -26,6 +27,7 @@ export function ScheduleView({
   books,
   result,
   pagesPerDay,
+  minutesPerDay = 30,
   method,
   onReorder,
 }: Props) {
@@ -102,16 +104,31 @@ export function ScheduleView({
         </span>
         <span class="schedule-view__totals">
           {copy.planner.bookCount(books.length)} ·{" "}
-          {copy.planner.pageCount(number(result.total_pages))} ·{" "}
-          {copy.planner.dayCount(result.total_reading_days)} ·{" "}
-          {copy.planner.dailyPace(number(pagesPerDay))}
+          {result.total_pages > 0 && (
+            <>{copy.planner.pageCount(number(result.total_pages))} · </>
+          )}
+          {result.total_minutes > 0 && (
+            <>{copy.planner.minuteCount(number(result.total_minutes))} · </>
+          )}
+          {copy.planner.dayCount(result.total_reading_days)}
+          {result.total_pages > 0 && (
+            <> · {copy.planner.dailyPace(number(pagesPerDay))}</>
+          )}
+          {result.total_minutes > 0 && (
+            <> · {copy.planner.dailyMinutePace(number(minutesPerDay))}</>
+          )}
         </span>
       </div>
 
       {method === "interleaved" && (
         <p class="schedule-view__note">
           <Icon name="info" size={14} aria-hidden="true" />
-          {copy.planner.sharedPace(number(pagesPerDay))}
+          {result.total_pages > 0 && (
+            <span>{copy.planner.sharedPace(number(pagesPerDay))}</span>
+          )}
+          {result.total_minutes > 0 && (
+            <span> {copy.planner.sharedMinutePace(number(minutesPerDay))}</span>
+          )}
         </p>
       )}
 
@@ -179,7 +196,16 @@ export function ScheduleView({
         {books.flatMap((book, index) => {
           const schedule = schedulesByBookId.get(book.id);
           if (!schedule) return [];
-          const { start_date, finish_date, daily_pages } = schedule;
+          const { start_date, finish_date, daily_pages, daily_minutes } =
+            schedule;
+          const completed =
+            book.kind === "page" ? book.pages_read : book.minutes_listened;
+          const maximum =
+            book.kind === "page" ? book.page_count : book.duration_minutes;
+          const shortAmount =
+            book.kind === "page"
+              ? copy.books.shortPages(number(maximum))
+              : copy.books.shortMinutes(number(maximum));
           const imagePriority =
             index === 0 ? "high" : index === 1 ? "eager" : undefined;
           const goodreadsUrl = goodreadsBookUrl(book);
@@ -260,9 +286,9 @@ export function ScheduleView({
                   )}
                   {!collapsed && (
                     <span class="schedule-view__book-pages hon-mono">
-                      {book.pages_read && book.pages_read > 0
-                        ? `${number(book.pages_read)} / ${copy.books.shortPages(number(book.page_count))}`
-                        : copy.books.shortPages(number(book.page_count))}
+                      {completed && completed > 0
+                        ? `${number(completed)} / ${shortAmount}`
+                        : shortAmount}
                     </span>
                   )}
                 </div>
@@ -276,8 +302,8 @@ export function ScheduleView({
                   {collapsed ? (
                     <>
                       <span class="schedule-view__book-pages">
-                        {book.pages_read ? `${number(book.pages_read)} / ` : ""}
-                        {copy.books.shortPages(number(book.page_count))}
+                        {completed ? `${number(completed)} / ` : ""}
+                        {shortAmount}
                       </span>
                       <span aria-hidden="true">•</span>
                       <span
@@ -315,7 +341,7 @@ export function ScheduleView({
                     onReorder(next);
                   }}
                 />
-                {method === "interleaved" && daily_pages ? (
+                {method === "interleaved" && (daily_pages || daily_minutes) ? (
                   <p
                     class={
                       collapsed
@@ -323,7 +349,11 @@ export function ScheduleView({
                         : "schedule-view__detail hon-mono"
                     }
                   >
-                    {copy.planner.aboutPace(number(daily_pages))}
+                    {daily_pages
+                      ? copy.planner.aboutPace(number(daily_pages))
+                      : copy.planner.aboutMinutePace(
+                          number(daily_minutes ?? 0),
+                        )}
                   </p>
                 ) : null}
               </div>

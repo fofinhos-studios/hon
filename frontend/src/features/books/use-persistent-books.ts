@@ -24,7 +24,9 @@ export function usePersistentBooks() {
       if (!Number.isSafeInteger(pages) || pages < 1) return;
       setBooks((current) =>
         current.map((book) =>
-          book.id === id && pages >= (book.pages_read ?? 0)
+          book.id === id &&
+          book.kind === "page" &&
+          pages >= (book.pages_read ?? 0)
             ? { ...book, page_count: pages }
             : book,
         ),
@@ -42,7 +44,29 @@ export function usePersistentBooks() {
     updateProgress: (id: string, pagesRead: number | undefined) =>
       setBooks((current) =>
         current.map((book) =>
-          book.id === id ? { ...book, pages_read: pagesRead } : book,
+          book.id === id && book.kind === "page"
+            ? { ...book, pages_read: pagesRead }
+            : book,
+        ),
+      ),
+    updateDuration: (id: string, minutes: number) => {
+      if (!Number.isSafeInteger(minutes) || minutes < 1) return;
+      setBooks((current) =>
+        current.map((book) =>
+          book.id === id &&
+          book.kind === "audiobook" &&
+          minutes >= (book.minutes_listened ?? 0)
+            ? { ...book, duration_minutes: minutes }
+            : book,
+        ),
+      );
+    },
+    updateListeningProgress: (id: string, minutes: number | undefined) =>
+      setBooks((current) =>
+        current.map((book) =>
+          book.id === id && book.kind === "audiobook"
+            ? { ...book, minutes_listened: minutes }
+            : book,
         ),
       ),
   };

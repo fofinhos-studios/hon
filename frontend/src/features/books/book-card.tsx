@@ -23,13 +23,17 @@ export function BookCard({
   onUpdatePageCount,
 }: Props) {
   const { copy, number, author } = useLanguage();
-  const progress = Math.round(((book.pages_read ?? 0) / book.page_count) * 100);
+  const maximum =
+    book.kind === "page" ? book.page_count : book.duration_minutes;
+  const completed =
+    book.kind === "page" ? book.pages_read : book.minutes_listened;
+  const progress = Math.round(((completed ?? 0) / maximum) * 100);
   const [editing, setEditing] = useState(false);
-  const [pages, setPages] = useState(String(book.page_count));
+  const [pages, setPages] = useState(String(maximum));
   const pageInput = useRef<HTMLInputElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const restoreEditFocus = useRef(false);
-  const minimum = Math.max(1, book.pages_read ?? 0);
+  const minimum = Math.max(1, completed ?? 0);
   const total = Number(pages);
   const valid = Number.isSafeInteger(total) && total >= minimum;
   const goodreadsUrl = goodreadsBookUrl(book);
@@ -90,6 +94,18 @@ export function BookCard({
               </a>
             </h3>
             <p>{author(book.author)}</p>
+            <p class="hon-eyebrow">
+              {book.kind === "audiobook"
+                ? copy.books.audiobook
+                : book.format === "physical"
+                  ? copy.books.physical
+                  : book.format === "digital"
+                    ? copy.books.digital
+                    : copy.books.unspecified}
+            </p>
+            {book.kind === "audiobook" && book.narrators.length > 0 && (
+              <p>{copy.books.narrators(book.narrators.join(", "))}</p>
+            )}
             <div class="book-plate__page-count">
               {editing ? (
                 <form
@@ -108,7 +124,9 @@ export function BookCard({
                   }}
                 >
                   <label class="sr-only" for={`book-pages-${book.id}`}>
-                    {copy.books.totalPages(book.title)}
+                    {book.kind === "page"
+                      ? copy.books.totalPages(book.title)
+                      : copy.books.totalMinutes(book.title)}
                   </label>
                   <input
                     id={`book-pages-${book.id}`}
@@ -134,13 +152,17 @@ export function BookCard({
                   </button>
                   {!valid && (
                     <p class="book-plate__edit-error" role="alert">
-                      {copy.books.editError(minimum)}
+                      {book.kind === "page"
+                        ? copy.books.editError(minimum)
+                        : copy.books.durationEditError(minimum)}
                     </p>
                   )}
                 </form>
               ) : (
                 <span class="hon-eyebrow">
-                  {copy.books.pageCount(number(book.page_count))}
+                  {book.kind === "page"
+                    ? copy.books.pageCount(number(maximum))
+                    : copy.books.durationCount(number(maximum))}
                 </span>
               )}
               {!editing && (
@@ -148,10 +170,14 @@ export function BookCard({
                   type="button"
                   class="book-plate__edit-trigger"
                   ref={editButton}
-                  aria-label={copy.books.editPageCount(book.title)}
+                  aria-label={
+                    book.kind === "page"
+                      ? copy.books.editPageCount(book.title)
+                      : copy.books.editDuration(book.title)
+                  }
                   aria-expanded={false}
                   onClick={() => {
-                    setPages(String(book.page_count));
+                    setPages(String(maximum));
                     setEditing(true);
                   }}
                 >
@@ -165,27 +191,35 @@ export function BookCard({
       <div class="book-plate__progress">
         <div class="book-plate__progress-inputs">
           <label>
-            <span class="sr-only">{copy.books.pagesRead}</span>
+            <span class="sr-only">
+              {book.kind === "page"
+                ? copy.books.pagesRead
+                : copy.books.minutesListened}
+            </span>
             <input
               type="number"
               min="0"
-              max={book.page_count}
+              max={maximum}
               placeholder="0"
-              value={book.pages_read ?? ""}
+              value={completed ?? ""}
               onInput={(event) =>
                 onUpdateProgress(
-                  parseProgressInput(
-                    event.currentTarget.value,
-                    book.page_count,
-                  ),
+                  parseProgressInput(event.currentTarget.value, maximum),
                 )
               }
               class="hon-input"
-              aria-label={copy.books.pagesReadFor(book.title)}
+              aria-label={
+                book.kind === "page"
+                  ? copy.books.pagesReadFor(book.title)
+                  : copy.books.minutesListenedFor(book.title)
+              }
             />
           </label>
           <span class="book-plate__progress-total">
-            / {copy.books.shortPages(number(book.page_count))}
+            /{" "}
+            {book.kind === "page"
+              ? copy.books.shortPages(number(maximum))
+              : copy.books.shortMinutes(number(maximum))}
           </span>
           <span>{copy.books.or}</span>
           <label>
@@ -195,27 +229,39 @@ export function BookCard({
               min="0"
               max="100"
               placeholder="0"
-              value={book.pages_read !== undefined ? progress : ""}
+              value={completed !== undefined ? progress : ""}
               onInput={(event) =>
                 onUpdateProgress(
-                  pagesFromPercent(event.currentTarget.value, book.page_count),
+                  pagesFromPercent(event.currentTarget.value, maximum),
                 )
               }
               class="hon-input"
-              aria-label={copy.books.percentageReadFor(book.title)}
+              aria-label={
+                book.kind === "page"
+                  ? copy.books.percentageReadFor(book.title)
+                  : copy.books.percentageListenedFor(book.title)
+              }
             />
           </label>
           <span>%</span>
         </div>
         <div class="book-plate__progress-summary">
           <div class="book-plate__progress-heading">
-            <span class="hon-eyebrow">{copy.books.readingProgress}</span>
+            <span class="hon-eyebrow">
+              {book.kind === "page"
+                ? copy.books.readingProgress
+                : copy.books.listeningProgress}
+            </span>
             <span>{progress}%</span>
           </div>
           <progress
-            value={book.pages_read ?? 0}
-            max={book.page_count}
-            aria-label={copy.books.readingProgressFor(book.title)}
+            value={completed ?? 0}
+            max={maximum}
+            aria-label={
+              book.kind === "page"
+                ? copy.books.readingProgressFor(book.title)
+                : copy.books.listeningProgressFor(book.title)
+            }
           />
         </div>
       </div>
