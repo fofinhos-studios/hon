@@ -2,6 +2,8 @@ import "../test/setup";
 
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { SeriesSearchResults } from "../features/books/book-search-results";
+import { LanguageProvider } from "../i18n";
 import type { SearchResult } from "../services/api";
 import type { Book, SearchBook, SearchSeries } from "../types";
 import { BookSearch } from "./book-search";
@@ -320,6 +322,7 @@ test("renders ordered series members before ordinary editions and bulk adds sele
   const input = view.getByLabelText("Search books");
   fireEvent.input(input, { target: { value: "The Wheel of Time" } });
   await waitFor(() => expect(view.getByText("The Wheel of Time")).toBeTruthy());
+  expect(view.getByText("5 books found · 2 main · 3 optional")).toBeTruthy();
 
   expect(input.getAttribute("aria-controls")).toBe(
     "book-series-results book-search-results",
@@ -372,6 +375,48 @@ test("renders ordered series members before ordinary editions and bulk adds sele
     "hardcover:4",
   ]);
   expect(view.getByText(/Not added.*Second volume/)).toBeTruthy();
+});
+
+test("labels singular main and optional counts in Portuguese", () => {
+  localStorage.setItem("hon.locale", "pt-BR");
+  try {
+    const series: SearchSeries = {
+      id: "42",
+      name: "The Wheel of Time",
+      author: "Robert Jordan",
+      incomplete: false,
+      members: [
+        seriesMember("hardcover:1", "First volume", 1, 300),
+        seriesMember("hardcover:0", "Prelude", 0, 80),
+      ],
+    };
+    const props = {
+      query: "The Wheel of Time",
+      onSelect: () => {},
+      onAddSeries: () => {},
+    };
+    const view = render(
+      <LanguageProvider>
+        <SeriesSearchResults {...props} series={[series]} />
+      </LanguageProvider>,
+    );
+    expect(
+      view.getByText("2 livros encontrados · 1 principal · 1 opcional"),
+    ).toBeTruthy();
+    view.rerender(
+      <LanguageProvider>
+        <SeriesSearchResults
+          {...props}
+          series={[{ ...series, members: series.members.slice(0, 1) }]}
+        />
+      </LanguageProvider>,
+    );
+    expect(
+      view.getByText("1 livro encontrado · 1 principal · 0 opcionais"),
+    ).toBeTruthy();
+  } finally {
+    localStorage.removeItem("hon.locale");
+  }
 });
 
 test("keeps a series with no eligible pages visible and prompts on individual add", async () => {

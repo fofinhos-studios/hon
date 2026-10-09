@@ -140,6 +140,10 @@ function SeriesCard({
       }),
     [series.members],
   );
+  let mainCount = 0;
+  for (const book of members) {
+    if (isMainBook(book)) mainCount++;
+  }
 
   const addSeries = () => {
     const eligible: SeriesBook[] = [];
@@ -172,6 +176,13 @@ function SeriesCard({
         <div class="book-search__work-heading">
           <strong>{series.name}</strong>
           <span>{series.author}</span>
+          <span class="book-search__series-count">
+            {copy.search.seriesCounts(
+              members.length,
+              mainCount,
+              members.length - mainCount,
+            )}
+          </span>
         </div>
         <label class="book-search__series-option">
           <input
