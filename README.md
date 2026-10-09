@@ -3,7 +3,9 @@
   <a href="https://hon.fofinhos.studio/">hon</a>
 </h1>
 
-Search for books, audiobooks, and series. A series result shows its books in number order before ordinary book results. You can add all main volumes at once. Select optional books to add them too. Books without page counts stay visible, but a bulk add skips them and names them in a warning. For an individual edition, enter a missing page count or recording duration when you add it.
+Search for books, audiobooks, and series. A series result shows its books in number order before ordinary book results. If an ordinary book title exactly matches the search, series with another name do not appear.
+
+You can add all main volumes at once. Select optional books to add them too. Books without page counts stay visible, but a bulk add skips them and names them in a warning. For an individual edition, enter a missing page count or recording duration when you add it.
 
 Bookinfo, Google Books, and Open Library provide book metadata. [AudioSilo Meta](https://meta.audiosilo.app/docs/api/) provides audiobook metadata. [Hardcover](https://hardcover.app/api) provides series positions and default edition page counts. The backend needs `HARDCOVER_API_TOKEN` to search for series. Set this value in the backend environment and the deployment secret store. Do not put it in frontend assets. If Hardcover is unavailable, ordinary book search still works and shows a partial results warning.
 

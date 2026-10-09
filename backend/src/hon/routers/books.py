@@ -25,6 +25,12 @@ SEARCH_DEADLINE_SECONDS = 12.0
 _cache: OrderedDict[str, tuple[float, SearchResult]] = OrderedDict()
 
 
+def _series_title_key(value: str) -> str:
+    title = folded(value)
+    first, separator, rest = title.partition(" ")
+    return rest if separator and first in {"a", "an", "the", "o", "os", "as", "um", "uma", "uns", "umas"} else title
+
+
 @router.post("/visuals", response_model=BookVisuals)
 async def book_visuals(book: VisualRequest) -> BookVisuals:
     return await get_visuals(book)
@@ -100,8 +106,14 @@ async def _search_catalogs(query: str) -> SearchResult:
                     series.extend(result)
                 else:
                     books.extend(result)
-                sources.append(name)
+                    sources.append(name)
     ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in rank_books(query, books)]
+    query_title = folded(query)
+    if any(folded(book.title) == query_title for book in ranked):
+        name_key = _series_title_key(query)
+        series = [item for item in series if _series_title_key(item.name) == name_key]
+    if series:
+        sources.append("hardcover")
     if not successes:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")

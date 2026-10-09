@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from hon.models.book import AudiobookResult, BookResult, SeriesMembership, SeriesResult
 from hon.routers.books import _cache
-from hon.services.hardcover import SeriesProviderError
+from hon.services.hardcover import SeriesProviderError, search_series
 
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
 
@@ -56,7 +57,8 @@ def test_search_maps_outages(client: TestClient, catalogs, error, status):
         catalog.side_effect = error
     assert client.get("/books/search?q=dune").status_code == status
 
-def test_plain_search_returns_series_before_ordinary_books(client: TestClient, catalogs):
+@pytest.mark.parametrize("query", ["The Wheel of Time", "Wheel of Time"])
+def test_plain_search_returns_series_before_ordinary_books(client: TestClient, catalogs, query):
     member = BOOK.model_copy(
         update={
             "id": "hardcover:17",
@@ -65,15 +67,66 @@ def test_plain_search_returns_series_before_ordinary_books(client: TestClient, c
             "series": SeriesMembership(id="5", name="The Wheel of Time", position=1),
         }
     )
+    unrelated = member.model_copy(update={
+        "id": "hardcover:18",
+        "series": SeriesMembership(id="6", name="Wheel of Fortune", position=1),
+    })
     catalogs[4].return_value = [
-        SeriesResult(id="5", name="The Wheel of Time", author="Robert Jordan", members=[member], incomplete=False)
+        SeriesResult(id="5", name="The Wheel of Time", author="Robert Jordan", members=[member], incomplete=False),
+        SeriesResult(id="6", name="Wheel of Fortune", author="Another Writer", members=[unrelated], incomplete=False),
     ]
-    catalogs[0].return_value = [BOOK.model_copy(update={"title": "The Wheel of Time"})]
-    response = client.get("/books/search?q=The%20Wheel%20of%20Time")
+    catalogs[0].return_value = [BOOK.model_copy(update={"title": query})]
+    response = client.get("/books/search", params={"q": query})
     assert response.status_code == 200
+    assert [item["name"] for item in response.json()["series"]] == ["The Wheel of Time"]
     assert response.json()["series"][0]["members"][0]["series"]["position"] == 1
-    assert response.json()["books"][0]["title"] == "The Wheel of Time"
-    catalogs[4].assert_awaited_once_with("The Wheel of Time")
+    assert response.json()["books"][0]["title"] == query
+    catalogs[4].assert_awaited_once_with(query)
+
+
+@pytest.mark.parametrize(
+    ("query", "catalog_title", "series_name", "book_titles", "series_names", "source"),
+    [
+        ("The Eye of the World", "The Eye of the World", "Tales of Starlight",
+         ["The Eye of the World"], [], "google_books"),
+        ("Wheel", None, "The Wheel of Time", [], ["The Wheel of Time"], "hardcover"),
+        ("In the End", "In the End", "The End", ["In the End"], [], "google_books"),
+    ],
+)
+def test_exact_book_title_excludes_unrelated_series_but_partial_series_remains(
+    client: TestClient, catalogs, monkeypatch, query, catalog_title, series_name, book_titles, series_names, source,
+):
+    catalogs[0].return_value = (
+        [BOOK.model_copy(update={"title": catalog_title, "author": "Robert Jordan"})]
+        if catalog_title else []
+    )
+    catalogs[4].side_effect = search_series
+    monkeypatch.setenv("HARDCOVER_API_TOKEN", "private-test-token")
+    client_type = httpx.AsyncClient
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        if "SearchSeries" in payload["query"]:
+            return httpx.Response(200, json={"data": {"search": {"results": {
+                "hits": [{"document": {"slug": "starlight"}}],
+            }}}})
+        return httpx.Response(200, json={"data": {"series": [{
+            "id": 42, "name": series_name, "author": {"name": "Another Writer"},
+            "primary_books_count": 1,
+            "book_series": [{"position": 1, "book": {
+                "id": 17, "title": "First Tale", "pages": 250, "contributions": [],
+                "default_physical_edition": None, "default_ebook_edition": None,
+            }}],
+        }]}})
+
+    with patch("hon.services.hardcover.httpx.AsyncClient",
+               side_effect=lambda **options: client_type(transport=httpx.MockTransport(handle), **options)):
+        response = client.get("/books/search", params={"q": query})
+    assert response.status_code == 200
+    assert [book["title"] for book in response.json()["books"]] == book_titles
+    assert [item["name"] for item in response.json()["series"]] == series_names
+    assert response.json()["source"] == source
+    assert response.json()["partial"] is False
 
 
 def test_search_preserves_ordinary_books_when_series_fails(client: TestClient, catalogs):
