@@ -7,14 +7,14 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
-from hon.models.book import SearchResult
+from hon.models.book import BookResult, SearchResult
 from hon.models.visuals import BookVisuals, VisualRequest
 from hon.services.audiosilo import search as search_audiosilo
 from hon.services.book_visuals import get_visuals
 from hon.services.bookinfo import search as search_bookinfo
 from hon.services.catalog import folded, isbn_value, rank_books, work_key
 from hon.services.google_books import search as search_google_books
-from hon.services.hardcover import SeriesProviderError, search_series
+from hon.services.hardcover import SeriesProviderError, enrich_catalog_books, search_series
 from hon.services.open_library import search as search_open_library
 from hon.services.publisher_cover import get_publisher_cover
 
@@ -66,6 +66,7 @@ async def search_books(
 
 
 async def _search_catalogs(query: str) -> SearchResult:
+    started = monotonic()
     # Query editions across catalogs; an available result survives another provider's failure.
     providers = [
         ("bookinfo", search_bookinfo),
@@ -102,6 +103,16 @@ async def _search_catalogs(query: str) -> SearchResult:
                     books.extend(result)
                 sources.append(name)
     ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in rank_books(query, books)]
+    if any(isinstance(book, BookResult) for book in ranked):
+        try:
+            remaining = max(0, SEARCH_DEADLINE_SECONDS - (monotonic() - started) - 0.5)
+            async with asyncio.timeout(min(10, remaining)):
+                pages = await enrich_catalog_books(query, [book for book in ranked if isinstance(book, BookResult)])
+            page_iter = iter(pages)
+            ranked = [next(page_iter) if isinstance(book, BookResult) else book for book in ranked]
+        except (httpx.HTTPError, TimeoutError, SeriesProviderError) as exc:
+            logger.warning("Hardcover membership unavailable (%s)", type(exc).__name__)
+            errors.append(exc)
     if not successes:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")

@@ -62,6 +62,14 @@ export function BookSearchResults({ results, onSelect }: Props) {
                               ? copy.books.digital
                               : copy.books.unspecified}
                       </span>
+                      {book.kind === "page" && book.series && (
+                        <span class="hon-eyebrow book-search__result-series">
+                          {copy.books.seriesPosition(
+                            book.series.name,
+                            book.series.position,
+                          )}
+                        </span>
+                      )}
                       <span class="book-search__result-meta">
                         {book.kind === "audiobook"
                           ? book.duration_minutes
@@ -215,11 +223,13 @@ function SeriesCard({
               <BookCover book={book} />
               <span class="book-search__result-info">
                 <span class="book-search__result-title">{book.title}</span>
+                <span class="hon-eyebrow book-search__result-series">
+                  {copy.books.seriesPosition(
+                    book.series?.name ?? series.name,
+                    book.series?.position ?? null,
+                  )}
+                </span>
                 <span class="book-search__result-meta">
-                  {book.series?.position == null
-                    ? copy.search.unnumbered
-                    : copy.search.seriesBook(number(book.series.position))}
-                  {" · "}
                   {book.page_count
                     ? copy.books.pageCount(number(book.page_count))
                     : copy.search.pagesNotListed}

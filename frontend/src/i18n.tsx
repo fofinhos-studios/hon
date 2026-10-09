@@ -43,7 +43,6 @@ const en = {
     addEdition: "Add edition",
     includeOptional: "Include optional books",
     addSeries: "Add series",
-    seriesBook: (position: string) => `Book ${position}`,
     unnumbered: "Unnumbered",
     seriesIncomplete: "Some books may be missing from this series.",
     seriesSkipped: (titles: string) =>
@@ -209,7 +208,6 @@ const pt: Copy = {
     addEdition: "Adicionar edição",
     includeOptional: "Incluir livros opcionais",
     addSeries: "Adicionar série",
-    seriesBook: (position: string) => `Livro ${position}`,
     unnumbered: "Sem número",
     seriesIncomplete: "Alguns livros podem estar faltando nesta série.",
     seriesSkipped: (titles: string) =>

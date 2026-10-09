@@ -220,7 +220,9 @@ export function ScheduleView({
               key={book.id}
               ref={(element) => setItemRef(book.id, element)}
               data-book-id={book.id}
-              class={`schedule-view__item${isDragging ? " schedule-view__item--dragging" : ""}${isDropTarget ? " schedule-view__item--drop-target" : ""}`}
+              class={`schedule-view__item${book.kind === "page" && book.series ? " schedule-view__item--series" : ""}${
+                isDragging ? " schedule-view__item--dragging" : ""
+              }${isDropTarget ? " schedule-view__item--drop-target" : ""}`}
               style={{
                 ...bookVisualStyle(book),
                 ...getItemStyle(index, book.id),
@@ -281,8 +283,8 @@ export function ScheduleView({
                   >
                     {book.title}
                   </a>
-                  {!collapsed && book.kind === "page" && book.series && (
-                    <span class="hon-eyebrow">
+                  {book.kind === "page" && book.series && (
+                    <span class="hon-eyebrow schedule-view__series-label">
                       {copy.books.seriesPosition(
                         book.series.name,
                         book.series.position,

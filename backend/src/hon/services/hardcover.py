@@ -51,6 +51,35 @@ query SeriesBooks($slug: String!, $offset: Int!) {
 }
 """
 
+EDITION_MEMBERSHIP_QUERY = """
+query EditionMemberships($isbns: [String!]!) {
+  editions(where: {isbn_13: {_in: $isbns}}, limit: 100) {
+    isbn_13
+    book {
+      id title canonical_id is_partial_book compilation
+      contributions { contribution author { name } }
+      featured_book_series { position compilation series { id name canonical_id } }
+      book_series { position compilation series { id name canonical_id } }
+    }
+  }
+}
+"""
+BOOK_SEARCH_QUERY = """
+query SearchBooks($query: String!) {
+  search(query: $query, query_type: "Book", per_page: 100, page: 1) { ids }
+}
+"""
+BOOK_MEMBERSHIP_QUERY = """
+query BookMemberships($ids: [Int!]!) {
+  books(where: {id: {_in: $ids}}, limit: 100) {
+    id title canonical_id is_partial_book compilation
+    contributions { contribution author { name } }
+    featured_book_series { position compilation series { id name canonical_id } }
+    book_series { position compilation series { id name canonical_id } }
+  }
+}
+"""
+
 
 class SeriesProviderError(Exception):
     """Hardcover configuration or response cannot supply a trustworthy series list."""
@@ -267,3 +296,122 @@ async def search_series(query: str) -> list[SeriesResult]:
                 if len(results) == 3:
                     break
         return results
+
+
+def _catalog_isbn(value: str | None) -> str | None:
+    return isbn_value(value) if value else None
+
+
+def _membership(row: object) -> SeriesMembership | None:
+    if row is None:
+        return None
+    membership = _object(row)
+    if membership.get("compilation") is not False or "position" not in membership:
+        return None
+    series = _object(membership.get("series"))
+    if "canonical_id" not in series or series.get("canonical_id") is not None:
+        return None
+    series_id = _id(series.get("id"))
+    name = non_empty_string(series.get("name"))
+    if not series_id or not name:
+        return None
+    return SeriesMembership(id=series_id, name=name, position=_position(membership.get("position")))
+
+
+def _book_membership(raw: object) -> tuple[str, tuple[str, str], SeriesMembership | None] | None:
+    if raw is None:
+        return None
+    book = _object(raw)
+    if ("canonical_id" not in book or book.get("canonical_id") is not None
+            or book.get("is_partial_book") is not False or book.get("compilation") is not False
+            or "featured_book_series" not in book):
+        return None
+    book_id = _id(book.get("id"))
+    if book_id is not None and (not book_id.isascii() or not book_id.isdecimal()):
+        raise SeriesProviderError("Hardcover returned an invalid book ID")
+    title = non_empty_string(book.get("title"))
+    author = _author(book, "")
+    if not book_id or not title or not folded(author) or folded(author) == "unknown":
+        return None
+    memberships = {
+        (membership.id, membership.name, membership.position): membership
+        for raw_membership in _list(book.get("book_series"))
+        if (membership := _membership(raw_membership))
+    }
+    featured = _membership(book["featured_book_series"])
+    if featured:
+        return book_id, (folded(title), folded(author)), featured
+    if len(memberships) != 1:
+        return book_id, (folded(title), folded(author)), None
+    return book_id, (folded(title), folded(author)), next(iter(memberships.values()))
+
+
+async def enrich_catalog_books(query: str, books: list[BookResult]) -> list[BookResult]:
+    """Attach only verified Hardcover memberships; never replace catalog edition metadata."""
+    if not books:
+        return books
+    isbns = list(dict.fromkeys(
+        code for book in books
+        if folded(book.author) not in ("", "unknown") and (code := _catalog_isbn(book.isbn))
+    ))
+    needs_title = any(not book.isbn and folded(book.author) not in ("", "unknown") for book in books)
+    if not isbns and not needs_title:
+        return books
+    token = os.getenv("HARDCOVER_API_TOKEN")
+    if not token:
+        raise SeriesProviderError("Hardcover is not configured")
+    matches: dict[str, tuple[tuple[str, str], SeriesMembership]] = {}
+    title_matches: dict[tuple[str, str], list[SeriesMembership | None]] = {}
+    async with httpx.AsyncClient(timeout=10.0, headers={"Authorization": f"Bearer {token}"}) as client:
+        if isbns:
+            editions = _list((await _graphql(client, EDITION_MEMBERSHIP_QUERY, {"isbns": isbns})).get("editions"))
+            # A full page could hide conflicting edition records: trust no ISBN in that case.
+            if len(editions) < 100:
+                grouped: dict[str, list[object]] = {isbn: [] for isbn in isbns}
+                for raw in editions:
+                    edition = _object(raw)
+                    raw_isbn = edition.get("isbn_13")
+                    if not isinstance(raw_isbn, str):
+                        raise SeriesProviderError("Hardcover returned an invalid edition ISBN")
+                    code = _catalog_isbn(raw_isbn)
+                    if code in grouped:
+                        grouped[code].append(edition.get("book"))
+                for code, candidates in grouped.items():
+                    if len(candidates) == 1 and (match := _book_membership(candidates[0])) and match[2]:
+                        matches[code] = match[1], match[2]
+        if needs_title:
+            result = _object((await _graphql(client, BOOK_SEARCH_QUERY, {"query": query})).get("search"))
+            raw_ids = _list(result.get("ids"))
+            if len(raw_ids) < 100:
+                ids: list[int] = []
+                for raw_id in raw_ids:
+                    book_id = _id(raw_id)
+                    if book_id is None or not book_id.isascii() or not book_id.isdecimal():
+                        raise SeriesProviderError("Hardcover returned an invalid book search ID")
+                    try:
+                        ids.append(int(book_id))
+                    except ValueError as exc:
+                        raise SeriesProviderError("Hardcover returned an invalid book search ID") from exc
+                if ids:
+                    details = await _graphql(client, BOOK_MEMBERSHIP_QUERY, {"ids": list(dict.fromkeys(ids))})
+                    candidates = _list(details.get("books"))
+                    if len(candidates) >= 100:
+                        candidates = []
+                    searched_ids = {str(book_id) for book_id in ids}
+                    for raw in candidates:
+                        if match := _book_membership(raw):
+                            book_id, identity, membership = match
+                            if book_id in searched_ids:
+                                title_matches.setdefault(identity, []).append(membership)
+    enriched = []
+    for book in books:
+        identity = folded(book.title), folded(book.author)
+        code = _catalog_isbn(book.isbn)
+        match = matches.get(code) if code else None
+        membership = match[1] if match and match[0] == identity else None
+        if not book.isbn and identity[1] not in ("", "unknown"):
+            candidates = title_matches.get(identity, [])
+            if len(candidates) == 1 and candidates[0]:
+                membership = candidates[0]
+        enriched.append(book.model_copy(update={"series": membership}) if membership else book)
+    return enriched

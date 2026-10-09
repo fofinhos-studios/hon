@@ -141,6 +141,55 @@ describe("ScheduleView", () => {
     ).toContain("1");
   });
 
+  test("shows series position on compact cards without changing plain cards", () => {
+    const books: Book[] = [
+      {
+        ...initialBooks[0],
+        series: { id: "s1", name: "The Series", position: 4 },
+      },
+      initialBooks[1],
+    ];
+    const schedule = calculateSchedule(
+      books,
+      [0, 1, 2, 3, 4, 5, 6],
+      30,
+      "sequential",
+      "2026-01-05",
+    );
+    const view = render(
+      <ScheduleView
+        books={books}
+        result={schedule}
+        pagesPerDay={30}
+        method="sequential"
+        onReorder={() => {}}
+      />,
+    );
+    const seriesCard =
+      view.container.querySelector<HTMLElement>('[data-book-id="a"]');
+    const plainCard =
+      view.container.querySelector<HTMLElement>('[data-book-id="b"]');
+    expect(seriesCard?.classList.contains("schedule-view__item--series")).toBe(
+      true,
+    );
+    expect(
+      seriesCard?.querySelector(".schedule-view__series-label")?.textContent,
+    ).toBe("Book 4 · The Series");
+    expect(
+      seriesCard?.querySelector(".schedule-view__spine-number")?.textContent,
+    ).toContain("1");
+    expect(
+      seriesCard?.querySelector(".schedule-view__spine-meta"),
+    ).toBeTruthy();
+    expect(plainCard?.classList.contains("schedule-view__item--series")).toBe(
+      false,
+    );
+    expect(plainCard?.querySelector(".schedule-view__series-label")).toBeNull();
+    expect(
+      plainCard?.querySelector(".schedule-view__spine-number")?.textContent,
+    ).toContain("2");
+  });
+
   test("reorders the shared book list when a schedule row is dragged", async () => {
     const view = render(<ScheduleHarness />);
     const first = view.container.querySelector<HTMLElement>(
