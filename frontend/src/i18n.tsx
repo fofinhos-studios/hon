@@ -41,6 +41,13 @@ const en = {
     enterDuration: (title: string) =>
       `${title} — enter the duration in minutes.`,
     addEdition: "Add edition",
+    includeOptional: "Include optional books",
+    addSeries: "Add series",
+    seriesBook: (position: string) => `Book ${position}`,
+    unnumbered: "Unnumbered",
+    seriesIncomplete: "Some books may be missing from this series.",
+    seriesSkipped: (titles: string) =>
+      `Not added (pages not listed): ${titles}.`,
     searching: "Searching catalogs…",
     stillSearching: "Still searching catalogs…",
     takingLonger: "Taking longer than usual…",
@@ -64,6 +71,8 @@ const en = {
       `View ${title} on Goodreads (opens in a new tab)`,
     goodreadsTitle: "View on Goodreads",
     position: "Position",
+    seriesPosition: (name: string, position: number | null) =>
+      `${position === null ? "Unnumbered" : `Book ${position}`} · ${name}`,
     totalPages: (title: string) => `Total pages for ${title}`,
     save: "Save",
     cancel: "Cancel",
@@ -198,6 +207,13 @@ const pt: Copy = {
     enterDuration: (title: string) =>
       `${title} — informe a duração em minutos.`,
     addEdition: "Adicionar edição",
+    includeOptional: "Incluir livros opcionais",
+    addSeries: "Adicionar série",
+    seriesBook: (position: string) => `Livro ${position}`,
+    unnumbered: "Sem número",
+    seriesIncomplete: "Alguns livros podem estar faltando nesta série.",
+    seriesSkipped: (titles: string) =>
+      `Não adicionados (páginas não informadas): ${titles}.`,
     searching: "Buscando nos catálogos…",
     stillSearching: "Ainda buscando nos catálogos…",
     takingLonger: "Demorando mais que o normal…",
@@ -222,6 +238,8 @@ const pt: Copy = {
     goodreadsTitle: "Ver no Goodreads",
     position: "Posição",
     totalPages: (title: string) => `Total de páginas de ${title}`,
+    seriesPosition: (name: string, position: number | null) =>
+      `${position === null ? "Sem número" : `Livro ${String(position).replace(".", ",")}`} · ${name}`,
     save: "Salvar",
     cancel: "Cancelar",
     editError: (minimum: number) =>

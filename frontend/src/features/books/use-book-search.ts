@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { SearchApiError, searchBooks } from "../../services/api";
-import type { SearchBook } from "../../types";
+import type { SearchBook, SearchSeries } from "../../types";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -9,6 +9,7 @@ export type SearchErrorCode = "invalid" | "timeout" | "unavailable" | "unknown";
 export function useBookSearch(search = searchBooks) {
   const [query, setQueryState] = useState("");
   const [results, setResults] = useState<SearchBook[]>([]);
+  const [series, setSeries] = useState<SearchSeries[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [partial, setPartial] = useState(false);
@@ -33,6 +34,7 @@ export function useBookSearch(search = searchBooks) {
     cancelCurrentSearch();
     setQueryState("");
     setResults([]);
+    setSeries([]);
     setLoading(false);
     setSearched(false);
     setPartial(false);
@@ -47,6 +49,7 @@ export function useBookSearch(search = searchBooks) {
       const trimmed = value.trim();
       const requestId = requestIdRef.current;
       setResults([]);
+      setSeries([]);
       setSearched(false);
       setPartial(false);
       setError("");
@@ -64,6 +67,7 @@ export function useBookSearch(search = searchBooks) {
         try {
           const {
             books,
+            series: matches,
             source,
             partial: incomplete,
           } = await search(trimmed, {
@@ -71,6 +75,7 @@ export function useBookSearch(search = searchBooks) {
           });
           if (requestId !== requestIdRef.current) return;
           setResults(books);
+          setSeries(matches ?? []);
           setPartial(!!incomplete);
           setSearched(true);
           setUsingFallback(source === "open_library");
@@ -87,6 +92,7 @@ export function useBookSearch(search = searchBooks) {
               : "unknown",
           );
           setResults([]);
+          setSeries([]);
         } finally {
           if (controllerRef.current === controller)
             controllerRef.current = null;
@@ -104,6 +110,7 @@ export function useBookSearch(search = searchBooks) {
   return {
     query,
     results,
+    series,
     loading,
     searched,
     partial,

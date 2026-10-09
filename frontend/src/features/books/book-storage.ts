@@ -35,12 +35,23 @@ function isBook(value: unknown): value is Book {
   }
   const pages = book.page_count;
   const read = book.pages_read;
+  const series = book.series;
   return (
     typeof pages === "number" &&
     Number.isSafeInteger(pages) &&
     pages > 0 &&
     typeof book.format === "string" &&
     ["physical", "digital", "unspecified"].includes(book.format) &&
+    (series == null ||
+      (typeof series === "object" &&
+        "id" in series &&
+        typeof series.id === "string" &&
+        "name" in series &&
+        typeof series.name === "string" &&
+        "position" in series &&
+        (series.position === null ||
+          (typeof series.position === "number" &&
+            Number.isFinite(series.position))))) &&
     (read === undefined ||
       (typeof read === "number" &&
         Number.isSafeInteger(read) &&

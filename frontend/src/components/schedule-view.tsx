@@ -281,6 +281,14 @@ export function ScheduleView({
                   >
                     {book.title}
                   </a>
+                  {!collapsed && book.kind === "page" && book.series && (
+                    <span class="hon-eyebrow">
+                      {copy.books.seriesPosition(
+                        book.series.name,
+                        book.series.position,
+                      )}
+                    </span>
+                  )}
                   {collapsed && (
                     <span class="sr-only">{author(book.author)}</span>
                   )}

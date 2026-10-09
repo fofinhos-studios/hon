@@ -3,9 +3,11 @@
   <a href="https://hon.fofinhos.studio/">hon</a>
 </h1>
 
-Search for page books and audiobooks together, or add them yourself. Search results group editions of the same work and language, so you can choose a recording, physical book, or digital book separately. Page metadata comes from Bookinfo, Google Books, and Open Library; audiobook metadata comes from [AudioSilo Meta](https://meta.audiosilo.app/docs/api/). If a source omits a page count or recording duration, enter it when adding the edition.
+Search for books, audiobooks, and series. A series result shows its books in number order before ordinary book results. You can add all main volumes at once. Select optional books to add them too. Books without page counts stay visible, but a bulk add skips them and names them in a warning. For an individual edition, enter a missing page count or recording duration when you add it.
 
-Choose reading days and daily page and minute goals, or set a finish date. Read and listen in one global queue, or split each day's page and minute budgets across books. Reorder editions, edit their totals, and track pages read or minutes listened. Existing saved page books keep their IDs and progress.
+Bookinfo, Google Books, and Open Library provide book metadata. [AudioSilo Meta](https://meta.audiosilo.app/docs/api/) provides audiobook metadata. [Hardcover](https://hardcover.app/api) provides series positions and default edition page counts. The backend needs `HARDCOVER_API_TOKEN` to search for series. Set this value in the backend environment and the deployment secret store. Do not put it in frontend assets. If Hardcover is unavailable, ordinary book search still works and shows a partial results warning.
+
+Choose reading days and daily page and minute goals, or set a finish date. The library and schedule use one ordered book list. Reorder books, edit totals, and record progress. A bulk add keeps saved IDs, order, and progress.
 
 Export the daily plan as an `.ics` file or copy a fixed calendar feed URL. Each all-day event shows the book and its exact page or minute target. Existing page-only calendar URLs remain valid.
 

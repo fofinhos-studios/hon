@@ -11,6 +11,7 @@ const searchBooksMock = vi.fn(
     _options?: { signal?: AbortSignal },
   ): Promise<SearchResult> => ({
     books: [],
+    series: [],
     source: "google_books",
   }),
 );
@@ -21,6 +22,7 @@ beforeEach(() => {
   searchBooksMock.mockReset();
   searchBooksMock.mockImplementation(async () => ({
     books: [],
+    series: [],
     source: "google_books" as const,
   }));
 });
@@ -40,6 +42,7 @@ function SearchHarness() {
         Reset
       </button>
       <span>{search.results.map((book) => book.title).join(",")}</span>
+      <span>{search.series.map((item) => item.name).join(",")}</span>
       <span>{search.usingFallback ? "fallback" : "primary"}</span>
       <span>{search.error || "no error"}</span>
     </div>
@@ -73,6 +76,15 @@ describe("useBookSearch", () => {
           cover_url: null,
         },
       ],
+      series: [
+        {
+          id: "one",
+          name: "Series One",
+          author: "Author",
+          members: [],
+          incomplete: false,
+        },
+      ],
       source: "open_library",
     }));
     const view = render(<SearchHarness />);
@@ -84,11 +96,13 @@ describe("useBookSearch", () => {
       timeout: 700,
     });
     expect(view.getByText("fallback")).toBeTruthy();
+    expect(view.getByText("Series One")).toBeTruthy();
 
     fireEvent.click(view.getByRole("button", { name: "Reset" }));
 
     expect((view.getByLabelText("Query") as HTMLInputElement).value).toBe("");
     expect(view.queryByText("Dune")).toBeNull();
+    expect(view.queryByText("Series One")).toBeNull();
     expect(view.getByText("primary")).toBeTruthy();
   });
 
@@ -126,12 +140,22 @@ describe("useBookSearch", () => {
           cover_url: null,
         },
       ],
+      series: [
+        {
+          id: "two",
+          name: "Series Two",
+          author: "Author",
+          members: [],
+          incomplete: false,
+        },
+      ],
       source: "google_books",
     });
     rejectFirst?.(new Error("Search failed"));
 
     await waitFor(() => expect(view.getByText("Lord Test")).toBeTruthy());
     expect(view.getByText("no error")).toBeTruthy();
+    expect(view.getByText("Series Two")).toBeTruthy();
   });
 
   test("shows a search error for the active request", async () => {
@@ -190,5 +214,32 @@ describe("useBookSearch", () => {
     view.unmount();
 
     expect(signal?.aborted).toBe(true);
+  });
+  test("clears prior series on query edits and failed searches", async () => {
+    searchBooksMock
+      .mockResolvedValueOnce({
+        books: [],
+        series: [
+          {
+            id: "42",
+            name: "First series",
+            author: "Author",
+            members: [],
+            incomplete: false,
+          },
+        ],
+        source: "hardcover",
+      })
+      .mockRejectedValueOnce(new Error("Provider unavailable"));
+    const view = render(<SearchHarness />);
+    const input = view.getByLabelText("Query");
+    fireEvent.input(input, { target: { value: "first" } });
+    await waitFor(() => expect(view.getByText("First series")).toBeTruthy());
+    fireEvent.input(input, { target: { value: "second" } });
+    expect(view.queryByText("First series")).toBeNull();
+    await waitFor(() =>
+      expect(view.getByText("Provider unavailable")).toBeTruthy(),
+    );
+    expect(view.queryByText("First series")).toBeNull();
   });
 });

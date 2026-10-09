@@ -14,6 +14,12 @@ export const DAY_LABELS: Record<DayOfWeek, string> = {
 
 export const ALL_DAYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
 
+export interface SeriesMembership {
+  id: string;
+  name: string;
+  position: number | null;
+}
+
 export interface BookBase {
   id: string;
   title: string;
@@ -33,6 +39,7 @@ export interface PageBook extends BookBase {
   kind: "page";
   format: "physical" | "digital" | "unspecified";
   page_count: number;
+  series?: SeriesMembership | null;
   pages_read?: number;
 }
 
@@ -59,6 +66,14 @@ export type SearchBook =
       SearchMetadata & {
         duration_minutes: number | null;
       });
+
+export interface SearchSeries {
+  id: string;
+  name: string;
+  author: string;
+  members: Extract<SearchBook, { kind: "page" }>[];
+  incomplete: boolean;
+}
 
 export interface BookVisuals {
   color_version?: number;

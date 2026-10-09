@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { BookSearchResults } from "../features/books/book-search-results";
+import {
+  BookSearchResults,
+  SeriesSearchResults,
+} from "../features/books/book-search-results";
 import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
 import { useLanguage } from "../i18n";
@@ -13,10 +16,15 @@ import { Icon } from "./icon";
 
 interface Props {
   onAdd: (book: Book) => void;
+  onAddBooks: (books: Book[]) => void;
   searchBooks?: typeof defaultSearchBooks;
 }
 
-export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
+export function BookSearch({
+  onAdd,
+  onAddBooks,
+  searchBooks = defaultSearchBooks,
+}: Props) {
   const { copy } = useLanguage();
   const search = useBookSearch(searchBooks);
   const [manualOpen, setManualOpen] = useState(false);
@@ -43,6 +51,24 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
     Number.isSafeInteger(manualPageCount) &&
     manualPageCount > 0;
 
+  const toSavedBook = (book: SearchBook): Book | null => {
+    const { source: _source, work_key: _workKey, ...edition } = book;
+    const id = edition.id.startsWith(`${book.source}:`)
+      ? edition.id
+      : `${book.source}:${edition.id}`;
+    if (edition.kind === "page") {
+      if (
+        !edition.page_count ||
+        !Number.isSafeInteger(edition.page_count) ||
+        edition.page_count < 1
+      )
+        return null;
+      return { ...edition, id, page_count: edition.page_count };
+    }
+    if (!edition.duration_minutes) return null;
+    return { ...edition, id, duration_minutes: edition.duration_minutes };
+  };
+
   const handleAdd = async (book: SearchBook) => {
     const quantity =
       book.kind === "page" ? book.page_count : book.duration_minutes;
@@ -53,28 +79,23 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
       return;
     }
     const visuals = await getBookVisuals(book).catch(() => undefined);
-    const { source: _source, work_key: _workKey, ...edition } = book;
-    const savedId = edition.id.startsWith(`${book.source}:`)
-      ? edition.id
-      : `${book.source}:${edition.id}`;
-    if (edition.kind === "page" && edition.page_count) {
+    const saved = toSavedBook(book);
+    if (saved) {
       onAdd({
-        ...edition,
-        id: savedId,
-        page_count: edition.page_count,
-        ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
-      });
-    } else if (edition.kind === "audiobook" && edition.duration_minutes) {
-      onAdd({
-        ...edition,
-        id: savedId,
-        duration_minutes: edition.duration_minutes,
+        ...saved,
         ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
       });
     }
     setPendingBook(null);
     search.reset();
     searchInput.current?.focus();
+  };
+
+  const handleAddSeries = (books: Extract<SearchBook, { kind: "page" }>[]) => {
+    const saved = books
+      .map(toSavedBook)
+      .filter((book): book is Book => book !== null);
+    if (saved.length > 0) onAddBooks(saved);
   };
 
   const handleManualSubmit = (event: Event) => {
@@ -137,7 +158,12 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
               aria-busy={search.loading}
               aria-autocomplete="list"
               aria-controls={
-                search.results.length > 0 ? "book-search-results" : undefined
+                [
+                  search.series.length > 0 && "book-series-results",
+                  search.results.length > 0 && "book-search-results",
+                ]
+                  .filter(Boolean)
+                  .join(" ") || undefined
               }
             />
             {search.loading ? (
@@ -254,17 +280,34 @@ export function BookSearch({ onAdd, searchBooks = defaultSearchBooks }: Props) {
           loading={search.loading}
           error={search.error}
           errorCode={search.errorCode}
-          resultCount={search.results.length}
+          resultCount={
+            search.results.length +
+            search.series.length +
+            search.series.reduce(
+              (count, item) => count + item.members.length,
+              0,
+            )
+          }
+        />
+        <SeriesSearchResults
+          series={search.series}
+          query={search.query}
+          onSelect={handleAdd}
+          onAddSeries={handleAddSeries}
         />
         <BookSearchResults results={search.results} onSelect={handleAdd} />
         {search.partial && (
           <p class="book-search__status">{copy.search.partial}</p>
         )}
-        {search.searched && search.results.length === 0 && !search.error && (
-          <p class="book-search__status" aria-live="polite">
-            {copy.search.noResults}
-          </p>
-        )}
+        {search.searched &&
+          search.results.length === 0 &&
+          search.series.length === 0 &&
+          !search.partial &&
+          !search.error && (
+            <p class="book-search__status" aria-live="polite">
+              {copy.search.noResults}
+            </p>
+          )}
         {pendingBook && (
           <form
             class="book-search__edition"

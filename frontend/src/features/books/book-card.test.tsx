@@ -120,4 +120,22 @@ describe("BookCard", () => {
       expect(link.getAttribute("target")).toBe("_blank");
     }
   });
+  test("shows series membership apart from queue position", () => {
+    const view = render(
+      <BookCard
+        book={{
+          ...book,
+          series: { id: "series-1", name: "The Series", position: 4 },
+        }}
+        index={0}
+        onRemove={() => {}}
+        onUpdateProgress={() => {}}
+        onUpdatePageCount={() => {}}
+      />,
+    );
+    expect(view.getByText("Book 4 · The Series")).toBeTruthy();
+    expect(
+      view.container.querySelector(".book-plate__position")?.textContent,
+    ).toContain("1");
+  });
 });

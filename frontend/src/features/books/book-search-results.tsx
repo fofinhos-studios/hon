@@ -1,5 +1,6 @@
+import { useMemo, useState } from "preact/hooks";
 import { useLanguage } from "../../i18n";
-import type { SearchBook } from "../../types";
+import type { SearchBook, SearchSeries } from "../../types";
 import { BookCover } from "./book-art";
 
 interface Props {
@@ -36,7 +37,10 @@ export function BookSearchResults({ results, onSelect }: Props) {
             </div>
             <ul class="book-search__editions">
               {editions.map((book, index) => (
-                <li key={`${book.source}:${book.id}`} class="book-search__result-item">
+                <li
+                  key={`${book.source}:${book.id}`}
+                  class="book-search__result-item"
+                >
                   <button
                     type="button"
                     class="book-search__result"
@@ -90,6 +94,165 @@ export function BookSearchResults({ results, onSelect }: Props) {
           </li>
         );
       })}
+    </ul>
+  );
+}
+
+interface SeriesProps {
+  series: SearchSeries[];
+  query: string;
+  onSelect: (book: SearchBook) => void;
+  onAddSeries: (books: Extract<SearchBook, { kind: "page" }>[]) => void;
+}
+
+type SeriesBook = Extract<SearchBook, { kind: "page" }>;
+
+function isMainBook(book: SeriesBook): boolean {
+  const position = book.series?.position;
+  return position != null && position > 0 && Number.isInteger(position);
+}
+
+function SeriesCard({
+  series,
+  onSelect,
+  onAddSeries,
+}: {
+  series: SearchSeries;
+  onSelect: SeriesProps["onSelect"];
+  onAddSeries: SeriesProps["onAddSeries"];
+}) {
+  const { copy, number } = useLanguage();
+  const [includeOptional, setIncludeOptional] = useState(false);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const members = useMemo(
+    () =>
+      [...series.members].sort((left, right) => {
+        const a = left.series?.position;
+        const b = right.series?.position;
+        if (a == null && b == null)
+          return (
+            left.title.localeCompare(right.title) ||
+            left.id.localeCompare(right.id)
+          );
+        return (
+          (a ?? Number.POSITIVE_INFINITY) - (b ?? Number.POSITIVE_INFINITY)
+        );
+      }),
+    [series.members],
+  );
+
+  const addSeries = () => {
+    const eligible: SeriesBook[] = [];
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    for (const book of members) {
+      if (!includeOptional && !isMainBook(book)) continue;
+      const id = book.id.startsWith(`${book.source}:`)
+        ? book.id
+        : `${book.source}:${book.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (
+        book.page_count != null &&
+        Number.isSafeInteger(book.page_count) &&
+        book.page_count > 0
+      ) {
+        eligible.push(book);
+      } else {
+        missing.push(book.title);
+      }
+    }
+    setSkipped(missing);
+    if (eligible.length > 0) onAddSeries(eligible);
+  };
+
+  return (
+    <li class="book-search__series">
+      <div class="book-search__series-heading">
+        <div class="book-search__work-heading">
+          <strong>{series.name}</strong>
+          <span>{series.author}</span>
+        </div>
+        <label class="book-search__series-option">
+          <input
+            type="checkbox"
+            checked={includeOptional}
+            aria-label={`${copy.search.includeOptional}: ${series.name}`}
+            onChange={(event) => {
+              setIncludeOptional(event.currentTarget.checked);
+              setSkipped([]);
+            }}
+          />
+          {copy.search.includeOptional}
+        </label>
+        <button
+          type="button"
+          class="hon-btn hon-btn--accent"
+          aria-label={`${copy.search.addSeries}: ${series.name}`}
+          onClick={addSeries}
+        >
+          {copy.search.addSeries}
+        </button>
+        {series.incomplete && (
+          <p class="book-search__series-warning">
+            {copy.search.seriesIncomplete}
+          </p>
+        )}
+        <p class="book-search__series-warning" aria-live="polite">
+          {skipped.length > 0
+            ? copy.search.seriesSkipped(skipped.join(", "))
+            : ""}
+        </p>
+      </div>
+      <ul class="book-search__editions">
+        {members.map((book) => (
+          <li key={book.id} class="book-search__result-item">
+            <button
+              type="button"
+              class="book-search__result"
+              onClick={() => onSelect(book)}
+            >
+              <BookCover book={book} />
+              <span class="book-search__result-info">
+                <span class="book-search__result-title">{book.title}</span>
+                <span class="book-search__result-meta">
+                  {book.series?.position == null
+                    ? copy.search.unnumbered
+                    : copy.search.seriesBook(number(book.series.position))}
+                  {" · "}
+                  {book.page_count
+                    ? copy.books.pageCount(number(book.page_count))
+                    : copy.search.pagesNotListed}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+export function SeriesSearchResults({
+  series,
+  query,
+  onSelect,
+  onAddSeries,
+}: SeriesProps) {
+  if (series.length === 0) return null;
+  return (
+    <ul
+      class="book-search__results book-search__series-results"
+      id="book-series-results"
+    >
+      {series.map((item) => (
+        <SeriesCard
+          key={`${query}:${item.id}`}
+          series={item}
+          onSelect={onSelect}
+          onAddSeries={onAddSeries}
+        />
+      ))}
     </ul>
   );
 }

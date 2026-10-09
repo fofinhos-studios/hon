@@ -1,4 +1,4 @@
-import type { Book, BookVisuals, SearchBook } from "../types";
+import type { Book, BookVisuals, SearchBook, SearchSeries } from "../types";
 
 const API_BASE = "/api";
 
@@ -194,11 +194,13 @@ async function parseError(
 
 export interface SearchResult {
   books: SearchBook[];
+  series: SearchSeries[];
   source:
     | "google_books"
     | "open_library"
     | "bookinfo"
     | "audiosilo"
+    | "hardcover"
     | "combined";
   partial?: boolean;
 }

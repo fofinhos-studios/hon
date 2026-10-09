@@ -94,6 +94,14 @@ export function BookCard({
               </a>
             </h3>
             <p>{author(book.author)}</p>
+            {book.kind === "page" && book.series && (
+              <p class="hon-eyebrow">
+                {copy.books.seriesPosition(
+                  book.series.name,
+                  book.series.position,
+                )}
+              </p>
+            )}
             <p class="hon-eyebrow">
               {book.kind === "audiobook"
                 ? copy.books.audiobook

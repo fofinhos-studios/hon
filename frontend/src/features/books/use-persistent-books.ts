@@ -17,9 +17,22 @@ export function usePersistentBooks() {
     );
   }, []);
 
+  const addBooks = useCallback((incoming: Book[]) => {
+    setBooks((current) => {
+      const seen = new Set(current.map((book) => book.id));
+      const additions = incoming.filter((book) => {
+        if (seen.has(book.id)) return false;
+        seen.add(book.id);
+        return true;
+      });
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }, []);
+
   return {
     books,
     updateVisuals,
+    addBooks,
     updatePageCount: (id: string, pages: number) => {
       if (!Number.isSafeInteger(pages) || pages < 1) return;
       setBooks((current) =>

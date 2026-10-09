@@ -72,7 +72,7 @@ function AppContent() {
                 {copy.yourBooks}
               </h2>
             </div>
-            <BookSearch onAdd={library.addBook} />
+            <BookSearch onAdd={library.addBook} onAddBooks={library.addBooks} />
             <BookList
               books={library.books}
               onRemove={library.removeBook}
