@@ -53,6 +53,7 @@ export function usePersistentBooks() {
       ),
     removeBook: (id: string) =>
       setBooks((current) => current.filter((book) => book.id !== id)),
+    clearBooks: () => setBooks([]),
     reorderBooks: setBooks,
     updateProgress: (id: string, pagesRead: number | undefined) =>
       setBooks((current) =>

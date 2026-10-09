@@ -71,6 +71,19 @@ function AppContent() {
                 <Icon name="books" size={24} />
                 {copy.yourBooks}
               </h2>
+              {library.books.length > 0 && (
+                <button
+                  type="button"
+                  class="hon-btn"
+                  onClick={() => {
+                    if (window.confirm(copy.books.confirmRemoveAll)) {
+                      library.clearBooks();
+                    }
+                  }}
+                >
+                  {copy.books.removeAll}
+                </button>
+              )}
             </div>
             <BookSearch onAdd={library.addBook} onAddBooks={library.addBooks} />
             <BookList

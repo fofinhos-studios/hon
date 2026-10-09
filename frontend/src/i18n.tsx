@@ -68,6 +68,9 @@ const en = {
     empty: "Your library is empty.",
     manualAuthor: "Manual entry",
     remove: (title: string) => `Remove ${title}`,
+    removeAll: "Remove all books",
+    confirmRemoveAll:
+      "Remove all books from your library and reading schedule? This cannot be undone.",
     goodreads: (title: string) =>
       `View ${title} on Goodreads (opens in a new tab)`,
     goodreadsTitle: "View on Goodreads",
@@ -235,6 +238,9 @@ const pt: Copy = {
     empty: "Sua biblioteca está vazia.",
     manualAuthor: "Adição manual",
     remove: (title: string) => `Remover ${title}`,
+    removeAll: "Remover todos os livros",
+    confirmRemoveAll:
+      "Remover todos os livros da sua biblioteca e do cronograma de leitura? Esta ação não pode ser desfeita.",
     goodreads: (title: string) =>
       `Ver ${title} no Goodreads (abre em uma nova aba)`,
     goodreadsTitle: "Ver no Goodreads",
