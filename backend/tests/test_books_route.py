@@ -5,8 +5,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from hon.models.book import AudiobookResult, BookResult
+from hon.models.book import AudiobookResult, BookResult, SeriesMembership, SeriesResult
 from hon.routers.books import _cache
+from hon.services.hardcover import SeriesProviderError
 
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
 
@@ -19,8 +20,9 @@ def catalogs():
         patch("hon.routers.books.search_open_library", AsyncMock(return_value=[])) as library,
         patch("hon.routers.books.search_bookinfo", AsyncMock(return_value=[])) as bookinfo,
         patch("hon.routers.books.search_audiosilo", AsyncMock(return_value=[])) as audio,
+        patch("hon.routers.books.search_series", AsyncMock(return_value=[])) as series,
     ):
-        yield google, library, bookinfo, audio
+        yield google, library, bookinfo, audio, series
     _cache.clear()
 
 
@@ -29,7 +31,7 @@ def test_health_reports_service_status(client: TestClient):
 
 
 def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient, catalogs):
-    google, library, bookinfo, _ = catalogs
+    google, library, bookinfo, _, _ = catalogs
     google.return_value = [BOOK]
     bookinfo.return_value = [BOOK.model_copy(update={"id": "2", "publisher": "Other edition"})]
     response = client.get("/books/search?q=dune")
@@ -40,7 +42,7 @@ def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient
 
 
 def test_search_survives_a_provider_failure(client: TestClient, catalogs):
-    google, library, _, _ = catalogs
+    google, library, _, _, _ = catalogs
     google.side_effect = httpx.DecodingError("bad")
     library.return_value = [BOOK]
     response = client.get("/books/search?q=dune")
@@ -50,8 +52,65 @@ def test_search_survives_a_provider_failure(client: TestClient, catalogs):
 
 @pytest.mark.parametrize(("error", "status"), [(httpx.ReadTimeout("timeout"), 504), (httpx.ConnectError("bad"), 502)])
 def test_search_maps_outages(client: TestClient, catalogs, error, status):
-    catalogs[1].side_effect = error
+    for catalog in catalogs:
+        catalog.side_effect = error
     assert client.get("/books/search?q=dune").status_code == status
+
+def test_plain_search_returns_series_before_ordinary_books(client: TestClient, catalogs):
+    member = BOOK.model_copy(
+        update={
+            "id": "hardcover:17",
+            "title": "The Eye of the World",
+            "source": "hardcover",
+            "series": SeriesMembership(id="5", name="The Wheel of Time", position=1),
+        }
+    )
+    catalogs[4].return_value = [
+        SeriesResult(id="5", name="The Wheel of Time", author="Robert Jordan", members=[member], incomplete=False)
+    ]
+    catalogs[0].return_value = [BOOK.model_copy(update={"title": "The Wheel of Time"})]
+    response = client.get("/books/search?q=The%20Wheel%20of%20Time")
+    assert response.status_code == 200
+    assert response.json()["series"][0]["members"][0]["series"]["position"] == 1
+    assert response.json()["books"][0]["title"] == "The Wheel of Time"
+    catalogs[4].assert_awaited_once_with("The Wheel of Time")
+
+
+def test_search_preserves_ordinary_books_when_series_fails(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK]
+    catalogs[4].side_effect = SeriesProviderError("unauthorized")
+    response = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    assert response.json()["books"][0]["title"] == "Dune"
+    assert response.json()["series"] == []
+    assert response.json()["partial"] is True
+
+
+def test_empty_catalog_stays_available_when_series_token_missing(client: TestClient, catalogs):
+    catalogs[4].side_effect = SeriesProviderError("missing token")
+    response = client.get("/books/search?q=obscure")
+    assert response.status_code == 200
+    assert response.json()["books"] == []
+    assert response.json()["series"] == []
+    assert response.json()["partial"] is True
+
+
+def test_series_only_search_is_successful(client: TestClient, catalogs):
+    member = BOOK.model_copy(
+        update={
+            "id": "hardcover:17",
+            "source": "hardcover",
+            "series": SeriesMembership(id="5", name="Dune", position=1),
+        }
+    )
+    catalogs[4].return_value = [
+        SeriesResult(id="5", name="Dune", author="Frank Herbert", members=[member], incomplete=False)
+    ]
+    response = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    assert response.json()["source"] == "hardcover"
+    assert response.json()["books"] == []
+    assert response.json()["series"][0]["members"][0]["id"] == "hardcover:17"
 
 
 def test_search_validates_query(client: TestClient):

@@ -689,6 +689,39 @@ ul {
   max-height: 24rem;
   overflow-y: auto;
 }
+.book-search__series + .book-search__series {
+  border-top: var(--rule);
+}
+.book-search__series-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-subtle);
+}
+.book-search__series-heading .book-search__work-heading {
+  flex: 1 1 100%;
+  padding: 0;
+}
+.book-search__series-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  font-size: var(--text-sm);
+}
+.book-search__series-option input {
+  accent-color: var(--ink);
+}
+.book-search__series-warning {
+  flex-basis: 100%;
+  color: var(--muted-ink);
+  font-size: var(--text-xs);
+}
+.book-search__series-warning:empty {
+  display: none;
+}
 .book-search__work + .book-search__work {
   border-top: var(--rule);
 }

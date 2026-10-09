@@ -5,6 +5,12 @@ from pydantic import BaseModel, Field, StringConstraints
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
+class SeriesMembership(BaseModel):
+    id: str
+    name: str
+    position: float | None
+
+
 class BookResult(BaseModel):
     kind: Literal["page"] = "page"
     format: Literal["physical", "digital", "unspecified"] = "unspecified"
@@ -20,6 +26,7 @@ class BookResult(BaseModel):
     language: str | None = None
     publisher: str | None = None
     published_date: str | None = None
+    series: SeriesMembership | None = None
 
 
 class AudiobookResult(BaseModel):
@@ -42,7 +49,16 @@ class AudiobookResult(BaseModel):
 SearchBook = Annotated[BookResult | AudiobookResult, Field(discriminator="kind")]
 
 
+class SeriesResult(BaseModel):
+    id: str
+    name: str
+    author: str
+    members: list[BookResult]
+    incomplete: bool
+
+
 class SearchResult(BaseModel):
     books: list[SearchBook]
-    source: Literal["google_books", "open_library", "bookinfo", "audiosilo", "combined"]
+    source: Literal["google_books", "open_library", "bookinfo", "audiosilo", "hardcover", "combined"]
     partial: bool = False
+    series: list[SeriesResult] = Field(default_factory=list)

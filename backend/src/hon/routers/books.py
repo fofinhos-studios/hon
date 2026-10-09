@@ -14,6 +14,7 @@ from hon.services.book_visuals import get_visuals
 from hon.services.bookinfo import search as search_bookinfo
 from hon.services.catalog import folded, isbn_value, rank_books, work_key
 from hon.services.google_books import search as search_google_books
+from hon.services.hardcover import SeriesProviderError, search_series
 from hon.services.open_library import search as search_open_library
 from hon.services.publisher_cover import get_publisher_cover
 
@@ -57,7 +58,7 @@ async def search_books(
             result = await _search_catalogs(query)
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="Book search timed out") from exc
-    _cache[key] = (monotonic() + (300 if result.books and not result.partial else 15), result)
+    _cache[key] = (monotonic() + (300 if (result.books or result.series) and not result.partial else 15), result)
     _cache.move_to_end(key)
     while len(_cache) > 128:
         _cache.popitem(last=False)
@@ -72,27 +73,37 @@ async def _search_catalogs(query: str) -> SearchResult:
         ("open_library", search_open_library),
         ("audiosilo", search_audiosilo),
     ]
+    series_provider = ("hardcover", search_series)
 
     async def run(search):
         async with asyncio.timeout(10):
             return await search(query)
 
-    results = await asyncio.gather(*(run(search) for _, search in providers), return_exceptions=True)
+    results = await asyncio.gather(
+        *(run(search) for _, search in (*providers, series_provider)), return_exceptions=True
+    )
     books = []
+    series = []
     sources = []
     errors = []
-    for (name, _), result in zip(providers, results, strict=True):
+    successes = 0
+    for (name, _), result in zip((*providers, series_provider), results, strict=True):
         if isinstance(result, BaseException):
-            if not isinstance(result, (httpx.HTTPError, TimeoutError)):
+            if not isinstance(result, (httpx.HTTPError, TimeoutError, SeriesProviderError)):
                 raise result
             logger.warning("%s search unavailable (%s)", name, type(result).__name__)
             errors.append(result)
-        elif result:
-            books.extend(result)
-            sources.append(name)
+        else:
+            successes += 1
+            if result:
+                if name == "hardcover":
+                    series.extend(result)
+                else:
+                    books.extend(result)
+                sources.append(name)
     ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in rank_books(query, books)]
-    if not books and errors:
+    if not successes:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")
     source = sources[0] if len(sources) == 1 else "combined"
-    return SearchResult(books=ranked, source=source, partial=bool(errors))
+    return SearchResult(books=ranked, series=series, source=source, partial=bool(errors))

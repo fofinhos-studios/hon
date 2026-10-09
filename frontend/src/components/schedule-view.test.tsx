@@ -4,12 +4,12 @@ import { cleanup, fireEvent, render, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { afterEach, describe, expect, test } from "vitest";
 import { calculateSchedule } from "../domain/schedule";
-import type { Book } from "../types";
+import type { Book, PageBook } from "../types";
 import { ScheduleView } from "./schedule-view";
 
 afterEach(cleanup);
 
-const initialBooks: Book[] = [
+const initialBooks: PageBook[] = [
   {
     id: "a",
     title: "First Book",
@@ -31,7 +31,7 @@ const initialBooks: Book[] = [
 ];
 
 function ScheduleHarness() {
-  const [books, setBooks] = useState(initialBooks);
+  const [books, setBooks] = useState<Book[]>(initialBooks);
   const schedule = calculateSchedule(
     books,
     [0, 1, 2, 3, 4, 5, 6],
@@ -109,6 +109,36 @@ describe("ScheduleView", () => {
         ?.style.getPropertyValue("--book-fallback"),
     ).toBe(initialColor);
     expect(view.getByRole("button", { name: "Expand cards" })).toBeTruthy();
+  });
+
+  test("shows saved series number on expanded schedule separately from queue order", () => {
+    const books: Book[] = [
+      {
+        ...initialBooks[0],
+        series: { id: "s1", name: "The Series", position: 4 },
+      },
+    ];
+    const schedule = calculateSchedule(
+      books,
+      [0, 1, 2, 3, 4, 5, 6],
+      30,
+      "sequential",
+      "2026-01-05",
+    );
+    const view = render(
+      <ScheduleView
+        books={books}
+        result={schedule}
+        pagesPerDay={30}
+        method="sequential"
+        onReorder={() => {}}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Expand cards" }));
+    expect(view.getByText("Book 4 · The Series")).toBeTruthy();
+    expect(
+      view.container.querySelector(".schedule-view__station")?.textContent,
+    ).toContain("1");
   });
 
   test("reorders the shared book list when a schedule row is dragged", async () => {

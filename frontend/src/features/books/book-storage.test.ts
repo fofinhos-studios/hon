@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { Book, PageBook } from "../../types";
 import { loadBooks, saveBooks } from "./book-storage";
 
-const books: Book[] = [
+const books: PageBook[] = [
   {
     id: "dune",
     title: "Dune",
@@ -46,6 +46,40 @@ describe("book storage", () => {
     expect(loadBooks(adapter)).toEqual(books);
   });
 
+  test("preserves valid series membership and rejects malformed positions", () => {
+    const seriesBook: PageBook = {
+      ...books[0],
+      kind: "page",
+      format: "physical",
+      series: { id: "42", name: "Dune", position: 1.5 },
+    };
+    let serialized = "";
+    const adapter = {
+      getItem: () => serialized,
+      setItem: (_key: string, value: string) => {
+        serialized = value;
+      },
+    };
+    saveBooks(adapter, [seriesBook]);
+    expect(loadBooks(adapter)).toEqual([seriesBook]);
+    serialized = JSON.stringify([
+      { ...seriesBook, series: { ...seriesBook.series, position: "first" } },
+    ]);
+    expect(loadBooks(adapter)).toEqual([]);
+  });
+
+  test("keeps ordinary search books with null series beside saved progress", () => {
+    const ordinary: PageBook = {
+      ...books[0],
+      id: "google_books:edition",
+      series: null,
+    };
+    const adapter = {
+      getItem: () => JSON.stringify([...books, ordinary]),
+      setItem: () => {},
+    };
+    expect(loadBooks(adapter)).toEqual([...books, ordinary]);
+  });
   test("returns empty list for malformed or invalid data", () => {
     const adapter = {
       getItem: () => '{"books":[]}',
