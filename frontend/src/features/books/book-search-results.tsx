@@ -211,6 +211,7 @@ function SeriesCard({
           type="button"
           class="hon-btn hon-btn--accent"
           aria-label={`${copy.search.addSeries}: ${series.name}`}
+          disabled={mainCount === 0 && !includeOptional}
           onClick={addSeries}
         >
           {copy.search.addSeries}
@@ -227,31 +228,33 @@ function SeriesCard({
         </p>
       </div>
       <ul class="book-search__editions">
-        {members.map((book) => (
-          <li key={book.id} class="book-search__result-item">
-            <button
-              type="button"
-              class="book-search__result"
-              onClick={() => onSelect(book)}
-            >
-              <BookCover book={book} />
-              <span class="book-search__result-info">
-                <span class="book-search__result-title">{book.title}</span>
-                <span class="hon-eyebrow book-search__result-series">
-                  {copy.books.seriesPosition(
-                    book.series?.name ?? series.name,
-                    book.series?.position ?? null,
-                  )}
+        {members.map((book) =>
+          includeOptional || isMainBook(book) ? (
+            <li key={book.id} class="book-search__result-item">
+              <button
+                type="button"
+                class="book-search__result"
+                onClick={() => onSelect(book)}
+              >
+                <BookCover book={book} />
+                <span class="book-search__result-info">
+                  <span class="book-search__result-title">{book.title}</span>
+                  <span class="hon-eyebrow book-search__result-series">
+                    {copy.books.seriesPosition(
+                      book.series?.name ?? series.name,
+                      book.series?.position ?? null,
+                    )}
+                  </span>
+                  <span class="book-search__result-meta">
+                    {book.page_count
+                      ? copy.books.pageCount(number(book.page_count))
+                      : copy.search.pagesNotListed}
+                  </span>
                 </span>
-                <span class="book-search__result-meta">
-                  {book.page_count
-                    ? copy.books.pageCount(number(book.page_count))
-                    : copy.search.pagesNotListed}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
+              </button>
+            </li>
+          ) : null,
+        )}
       </ul>
     </li>
   );

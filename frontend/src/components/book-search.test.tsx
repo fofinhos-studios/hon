@@ -389,18 +389,9 @@ test("renders ordered series members before ordinary editions and bulk adds sele
   const titles = [
     ...view.container.querySelectorAll(".book-search__result-title"),
   ].map((node) => node.textContent);
-  expect(titles).toEqual([
-    "First volume",
-    "Second volume",
-    "Prelude",
-    "Midway tale",
-    "Unnumbered tale",
-    "Edition",
-  ]);
-  expect(view.getByText("Book 0 · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("Book 1.5 · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("Unnumbered · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("40 pages")).toBeTruthy();
+  expect(titles).toEqual(["First volume", "Second volume", "Edition"]);
+  expect(view.queryByText("Prelude")).toBeNull();
+  expect(view.queryByText("Book 0 · The Wheel of Time")).toBeNull();
   expect(
     view.getByText("Some books may be missing from this series."),
   ).toBeTruthy();
@@ -425,6 +416,21 @@ test("renders ordered series members before ordinary editions and bulk adds sele
       name: "Include optional books: The Wheel of Time",
     }),
   );
+  const selectedTitles = [
+    ...view.container.querySelectorAll(".book-search__result-title"),
+  ].map((node) => node.textContent);
+  expect(selectedTitles).toEqual([
+    "First volume",
+    "Second volume",
+    "Prelude",
+    "Midway tale",
+    "Unnumbered tale",
+    "Edition",
+  ]);
+  expect(view.getByText("Book 0 · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("Book 1.5 · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("Unnumbered · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("40 pages")).toBeTruthy();
   fireEvent.click(
     view.getByRole("button", { name: "Add series: The Wheel of Time" }),
   );
@@ -436,6 +442,49 @@ test("renders ordered series members before ordinary editions and bulk adds sele
     "hardcover:4",
   ]);
   expect(view.getByText(/Not added.*Second volume/)).toBeTruthy();
+});
+
+test("requires opting in before showing or adding a series with only optional books", () => {
+  const series: SearchSeries = {
+    id: "42",
+    name: "The Wheel of Time",
+    author: "Robert Jordan",
+    incomplete: false,
+    members: [
+      seriesMember("hardcover:3", "Midway tale", 1.5, 70),
+      seriesMember("hardcover:0", "Prelude", 0, 80),
+    ],
+  };
+  const onAddSeries = vi.fn();
+  const view = render(
+    <LanguageProvider>
+      <SeriesSearchResults
+        series={[series]}
+        query="The Wheel of Time"
+        onSelect={() => {}}
+        onAddSeries={onAddSeries}
+      />
+    </LanguageProvider>,
+  );
+
+  expect(view.getByText("2 books found · 0 main · 2 optional")).toBeTruthy();
+  expect(view.queryByText("Prelude")).toBeNull();
+  const add = view.getByRole("button", {
+    name: "Add series: The Wheel of Time",
+  }) as HTMLButtonElement;
+  expect(add.disabled).toBe(true);
+  fireEvent.click(
+    view.getByRole("checkbox", {
+      name: "Include optional books: The Wheel of Time",
+    }),
+  );
+  expect(view.getByText("Prelude")).toBeTruthy();
+  expect(add.disabled).toBe(false);
+  fireEvent.click(add);
+  expect(onAddSeries.mock.calls[0][0].map((book: Book) => book.id)).toEqual([
+    "hardcover:0",
+    "hardcover:3",
+  ]);
 });
 
 test("labels singular main and optional counts in Portuguese", () => {
@@ -585,6 +634,7 @@ test("resets optional selection and warnings with the search query", async () =>
       }) as HTMLInputElement
     ).checked,
   ).toBe(false);
+  expect(view.queryByText("Prelude")).toBeNull();
   expect(view.queryByText(/Not added.*First volume/)).toBeNull();
 });
 

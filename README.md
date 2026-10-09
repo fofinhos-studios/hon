@@ -3,7 +3,7 @@
   <a href="https://hon.fofinhos.studio/">hon</a>
 </h1>
 
-Search for books, audiobooks, and series. Series cards show available main and optional book counts, with main books first. If numbered books with known languages agree, optional books with another known language do not appear. Books with no language data stay visible. A series result appears before ordinary books. If a book title exactly matches the search, series with another name do not appear.
+Search for books, audiobooks, and series. Series cards appear before ordinary books, show main books first, and count optional books. Select `Include optional books` to show optional entries and include them in a bulk add. If numbered books with known languages agree, optional books with another known language do not appear. Optional books with no language data remain available in this list. If a book title exactly matches the search, series with another name do not appear.
 
 Add the main books in order, include optional books, or choose one edition. A bulk add skips books without page counts and lists their titles. A bulk add keeps saved IDs, order, and progress. For an individual edition, enter a missing page count or recording duration when you add it. Confirmed series names and volume numbers appear on book search, library, and schedule cards. Set reading days and daily goals, track progress, and export the schedule as a calendar.
 
