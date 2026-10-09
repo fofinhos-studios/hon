@@ -121,7 +121,7 @@ async def test_main_optional_order_duplicates_and_provenance(monkeypatch: pytest
     assert second.cover_fallback_url is None
     summary = series.members[-2]
     assert (summary.page_count, summary.format, summary.isbn, summary.language) == (
-        100, "unspecified", None, None,
+        100, "unspecified", None, "en",
     )
     unnumbered = series.members[-1]
     assert (unnumbered.page_count, unnumbered.format, unnumbered.isbn, unnumbered.language) == (
@@ -134,6 +134,46 @@ async def test_main_optional_order_duplicates_and_provenance(monkeypatch: pytest
         "id": "42", "name": "The Wheel of Time", "position": 1.0,
     }
     assert BookResult(id="old", title="Old", author="Writer", page_count=1, cover_url=None).series is None
+
+@pytest.mark.asyncio
+async def test_series_excludes_translated_optional_books(monkeypatch: pytest.MonkeyPatch):
+    english = {"id": 10, "pages": 200, "isbn_13": None, "language": {"code2": "en"}}
+    dutch = {"id": 11, "pages": 368, "isbn_13": None, "language": {"code2": "nl"}}
+    members = [
+        row(10, 0, title="De Wereld van Het Rad des Tijds", pages=368,
+            default_physical_edition={**dutch, "pages": 0}),
+        row(11, 0, title="New Spring", default_physical_edition=english),
+        row(12, 1.5, title="Een andere vertaling", default_physical_edition=dutch),
+        row(13, 1, title="The Eye of the World", default_physical_edition=english),
+        row(14, 2, title="The Great Hunt", default_physical_edition=english),
+        row(15, None, title="Companion without language"),
+    ]
+    mock, _ = transport({"wheel": members}, counts={"wheel": 2})
+    [series] = await lookup(monkeypatch, mock)
+    assert [(book.title, book.language) for book in series.members] == [
+        ("New Spring", "en"),
+        ("The Eye of the World", "en"),
+        ("The Great Hunt", "en"),
+        ("Companion without language", None),
+    ]
+    assert series.incomplete is False
+
+
+@pytest.mark.asyncio
+async def test_series_keeps_optional_books_when_main_languages_conflict(monkeypatch: pytest.MonkeyPatch):
+    def edition(code: str) -> dict:
+        return {"id": 10, "pages": 200, "isbn_13": None, "language": {"code2": code}}
+
+    mock, _ = transport({"wheel": [
+        row(1, 1, title="English volume", default_physical_edition=edition("en")),
+        row(2, 2, title="French volume", default_physical_edition=edition("fr")),
+        row(3, 0, title="Dutch companion", default_physical_edition=edition("nl")),
+    ]}, counts={"wheel": 2})
+    [series] = await lookup(monkeypatch, mock)
+    assert [book.title for book in series.members] == [
+        "Dutch companion", "English volume", "French volume",
+    ]
+    assert series.incomplete is False
 
 
 @pytest.mark.asyncio

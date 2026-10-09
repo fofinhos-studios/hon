@@ -390,10 +390,10 @@ test("renders ordered series members before ordinary editions and bulk adds sele
     ...view.container.querySelectorAll(".book-search__result-title"),
   ].map((node) => node.textContent);
   expect(titles).toEqual([
-    "Prelude",
     "First volume",
-    "Midway tale",
     "Second volume",
+    "Prelude",
+    "Midway tale",
     "Unnumbered tale",
     "Edition",
   ]);

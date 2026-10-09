@@ -120,6 +120,16 @@ function isMainBook(book: SeriesBook): boolean {
   return position != null && position > 0 && Number.isInteger(position);
 }
 
+function compareSeriesBooks(left: SeriesBook, right: SeriesBook): number {
+  const a = left.series?.position;
+  const b = right.series?.position;
+  if (a == null && b == null)
+    return (
+      left.title.localeCompare(right.title) || left.id.localeCompare(right.id)
+    );
+  return (a ?? Number.POSITIVE_INFINITY) - (b ?? Number.POSITIVE_INFINITY);
+}
+
 function SeriesCard({
   series,
   onSelect,
@@ -134,18 +144,11 @@ function SeriesCard({
   const [skipped, setSkipped] = useState<string[]>([]);
   const members = useMemo(
     () =>
-      [...series.members].sort((left, right) => {
-        const a = left.series?.position;
-        const b = right.series?.position;
-        if (a == null && b == null)
-          return (
-            left.title.localeCompare(right.title) ||
-            left.id.localeCompare(right.id)
-          );
-        return (
-          (a ?? Number.POSITIVE_INFINITY) - (b ?? Number.POSITIVE_INFINITY)
-        );
-      }),
+      [...series.members].sort(
+        (left, right) =>
+          Number(isMainBook(right)) - Number(isMainBook(left)) ||
+          compareSeriesBooks(left, right),
+      ),
     [series.members],
   );
   let mainCount = 0;
@@ -175,7 +178,7 @@ function SeriesCard({
       }
     }
     setSkipped(missing);
-    if (eligible.length > 0) onAddSeries(eligible);
+    if (eligible.length > 0) onAddSeries(eligible.sort(compareSeriesBooks));
   };
 
   return (

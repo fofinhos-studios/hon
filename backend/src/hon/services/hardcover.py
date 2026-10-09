@@ -124,6 +124,7 @@ def _position(value: object) -> float | None:
 def _edition(
     book: dict[str, Any],
 ) -> tuple[int | None, Literal["physical", "digital", "unspecified"], str | None, str | None]:
+    default_language: str | None = None
     for key in ("default_physical_edition", "default_ebook_edition"):
         book_format: Literal["physical", "digital"] = (
             "physical" if key == "default_physical_edition" else "digital"
@@ -132,15 +133,17 @@ def _edition(
         if edition is None:
             continue
         edition = _object(edition)
+        language = edition.get("language")
+        language_code = non_empty_string(_object(language).get("code2")) if language is not None else None
+        if default_language is None:
+            default_language = language_code
         pages = positive_page_count(edition.get("pages"))
         if pages is None:
             continue
-        language = edition.get("language")
-        language_code = non_empty_string(_object(language).get("code2")) if language is not None else None
         raw_isbn = edition.get("isbn_13")
         isbn = isbn_value(raw_isbn) if isinstance(raw_isbn, str) else None
         return pages, book_format, isbn, language_code
-    return positive_page_count(book.get("pages")), "unspecified", None, None
+    return positive_page_count(book.get("pages")), "unspecified", None, default_language
 
 
 def _author(book: dict[str, Any], series_author: str) -> str:
@@ -264,6 +267,18 @@ async def _series(client: httpx.AsyncClient, slug: str) -> SeriesResult | None:
         if position is not None and _main(position):
             main_positions.add(position)
         members.append(book)
+    main_languages = {
+        book.language.casefold()
+        for book in members
+        if book.language and book.series and _main(book.series.position)
+    }
+    if len(main_languages) == 1:
+        language = next(iter(main_languages))
+        members = [
+            book for book in members
+            if (book.series is not None and _main(book.series.position))
+            or book.language is None or book.language.casefold() == language
+        ]
     if not members:
         return None
     members.sort(key=_member_order)
