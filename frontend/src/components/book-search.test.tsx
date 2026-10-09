@@ -71,6 +71,9 @@ test("adds a selected result and resets search", async () => {
   await waitFor(() => expect(view.getByText("Dune")).toBeTruthy(), {
     timeout: 700,
   });
+  expect(
+    view.container.querySelector(".book-search__result-series"),
+  ).toBeNull();
   fireEvent.click(view.getByRole("button", { name: /Edition.*412 pages/ }));
 
   const { source: _source, work_key: _workKey, ...selected } = book;
@@ -227,6 +230,62 @@ test("keeps an edition without pages and asks for its count before adding", asyn
   expect(view.queryByRole("button", { name: "Add edition" })).toBeNull();
 });
 
+test("shows ordinary edition membership and retains it after entering missing pages", async () => {
+  const edition: SearchBook = {
+    id: "ordinary-edition",
+    title: "A Series Novel",
+    author: "An Author",
+    kind: "page",
+    format: "physical",
+    source: "open_library",
+    work_key: "a series novel|an author|en",
+    page_count: null,
+    cover_url: null,
+    isbn: "9781234567897",
+    series: { id: "series-8", name: "The Long Series", position: 1.5 },
+  };
+  searchBooksMock.mockResolvedValue({
+    books: [edition],
+    series: [],
+    source: "open_library",
+  });
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch
+      onAdd={onAdd}
+      onAddBooks={() => {}}
+      searchBooks={searchBooksMock}
+    />,
+  );
+  const input = view.getByLabelText("Search books") as HTMLInputElement;
+  fireEvent.input(input, { target: { value: "A Series Novel" } });
+  await waitFor(() => expect(view.getByText("A Series Novel")).toBeTruthy());
+  const result = view.getByRole("button", {
+    name: /Physical.*Book 1\.5 · The Long Series.*Pages not listed/,
+  });
+  expect(result.querySelector(".book-search__result-series")?.textContent).toBe(
+    "Book 1.5 · The Long Series",
+  );
+  fireEvent.click(result);
+  expect(input.value).toBe("");
+  expect(onAdd).not.toHaveBeenCalled();
+  const pages = view.getByLabelText("Pages") as HTMLInputElement;
+  await waitFor(() => expect(document.activeElement).toBe(pages));
+  fireEvent.input(pages, { target: { value: "321" } });
+  fireEvent.click(view.getByRole("button", { name: "Add edition" }));
+  await waitFor(() =>
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "open_library:ordinary-edition",
+        page_count: 321,
+        isbn: "9781234567897",
+        format: "physical",
+        series: { id: "series-8", name: "The Long Series", position: 1.5 },
+      }),
+    ),
+  );
+});
+
 test("searches the typed title without a language selector or restriction", async () => {
   const search = vi.fn(
     async (query: string): Promise<SearchResult> => ({
@@ -338,8 +397,10 @@ test("renders ordered series members before ordinary editions and bulk adds sele
     "Unnumbered tale",
     "Edition",
   ]);
-  expect(view.getByText(/Book 1\.5/)).toBeTruthy();
-  expect(view.getByText(/Unnumbered\s*·\s*40 pages/)).toBeTruthy();
+  expect(view.getByText("Book 0 · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("Book 1.5 · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("Unnumbered · The Wheel of Time")).toBeTruthy();
+  expect(view.getByText("40 pages")).toBeTruthy();
   expect(
     view.getByText("Some books may be missing from this series."),
   ).toBeTruthy();

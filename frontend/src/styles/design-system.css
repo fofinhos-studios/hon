@@ -777,6 +777,9 @@ ul {
   font-weight: var(--weight-medium);
   overflow-wrap: anywhere;
 }
+.book-search__result-series {
+  color: var(--muted-ink);
+}
 .book-search__result-meta,
 .book-search__fallback-note,
 .book-search__status {
@@ -1254,6 +1257,24 @@ ul {
   font-size: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+.schedule-view--compact
+  .schedule-view__item--series
+  .schedule-view__spine-handle,
+.schedule-view--compact .schedule-view__item--series .reorder-controls {
+  grid-row: 1 / span 2;
+}
+.schedule-view--compact
+  .schedule-view__item--series
+  .schedule-view__spine-meta {
+  grid-row: 2;
+}
+.schedule-view--compact .schedule-view__series-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 .schedule-view__spine-meta {

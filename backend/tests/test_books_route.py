@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from hon.models.book import AudiobookResult, BookResult, SeriesMembership, SeriesResult
 from hon.routers.books import _cache
-from hon.services.hardcover import SeriesProviderError
+from hon.services.hardcover import SeriesProviderError, enrich_catalog_books
 
 BOOK = BookResult(id="1", title="Dune", author="Frank Herbert", page_count=412, cover_url=None)
 
@@ -21,8 +22,9 @@ def catalogs():
         patch("hon.routers.books.search_bookinfo", AsyncMock(return_value=[])) as bookinfo,
         patch("hon.routers.books.search_audiosilo", AsyncMock(return_value=[])) as audio,
         patch("hon.routers.books.search_series", AsyncMock(return_value=[])) as series,
+        patch("hon.routers.books.enrich_catalog_books", AsyncMock(side_effect=lambda query, books: books)) as enrich,
     ):
-        yield google, library, bookinfo, audio, series
+        yield google, library, bookinfo, audio, series, enrich
     _cache.clear()
 
 
@@ -31,7 +33,7 @@ def test_health_reports_service_status(client: TestClient):
 
 
 def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient, catalogs):
-    google, library, bookinfo, _, _ = catalogs
+    google, library, bookinfo, _, _, _ = catalogs
     google.return_value = [BOOK]
     bookinfo.return_value = [BOOK.model_copy(update={"id": "2", "publisher": "Other edition"})]
     response = client.get("/books/search?q=dune")
@@ -42,7 +44,7 @@ def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient
 
 
 def test_search_survives_a_provider_failure(client: TestClient, catalogs):
-    google, library, _, _, _ = catalogs
+    google, library, _, _, _, _ = catalogs
     google.side_effect = httpx.DecodingError("bad")
     library.return_value = [BOOK]
     response = client.get("/books/search?q=dune")
@@ -93,6 +95,103 @@ def test_empty_catalog_stays_available_when_series_token_missing(client: TestCli
     assert response.json()["books"] == []
     assert response.json()["series"] == []
     assert response.json()["partial"] is True
+
+
+def test_catalog_isbn_enrichment_round_trip_and_failed_enrichment(client: TestClient, catalogs, monkeypatch):
+    isbn = "9780441172719"
+    catalog = BOOK.model_copy(update={
+        "source": "google_books", "isbn": isbn, "format": "physical",
+        "cover_url": "https://example.test/cover.jpg",
+    })
+    catalogs[0].return_value = [catalog]
+    catalogs[5].side_effect = enrich_catalog_books
+    monkeypatch.setenv("HARDCOVER_API_TOKEN", "private-test-token")
+    client_type = httpx.AsyncClient
+    unavailable = False
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if unavailable:
+            return httpx.Response(401)
+        payload = json.loads(request.content)
+        assert "EditionMemberships" in payload["query"]
+        assert payload["variables"] == {"isbns": [isbn]}
+        return httpx.Response(200, json={"data": {"editions": [{"isbn_13": isbn, "book": {
+            "id": 81, "title": "Dune", "canonical_id": None, "is_partial_book": False,
+            "compilation": False,
+            "contributions": [{"contribution": "Author", "author": {"name": "Frank Herbert"}}],
+            "featured_book_series": {"position": 1, "compilation": False,
+                "series": {"id": 31, "name": "Dune Saga", "canonical_id": None}},
+            "book_series": [],
+        }}]}})
+
+    with patch("hon.services.hardcover.httpx.AsyncClient",
+               side_effect=lambda **options: client_type(transport=httpx.MockTransport(handle), **options)):
+        response = client.get("/books/search?q=dune")
+        _cache.clear()
+        unavailable = True
+        failed = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    enriched = response.json()["books"][0]
+    assert enriched["series"] == {"id": "31", "name": "Dune Saga", "position": 1}
+    assert enriched["id"] == catalog.id
+    assert enriched["source"] == catalog.source
+    assert enriched["format"] == catalog.format
+    assert enriched["page_count"] == catalog.page_count
+    assert enriched["cover_url"] == catalog.cover_url
+    assert response.json()["partial"] is False
+
+    assert failed.status_code == 200
+    assert failed.json()["books"][0]["series"] is None
+    assert failed.json()["partial"] is True
+
+
+def test_missing_token_leaves_existing_catalog_editions_intact(client: TestClient, catalogs, monkeypatch):
+    catalog = BOOK.model_copy(update={"isbn": "9780441172719", "source": "google_books"})
+    catalogs[0].return_value = [catalog]
+    catalogs[4].side_effect = SeriesProviderError("not configured")
+    catalogs[5].side_effect = enrich_catalog_books
+    monkeypatch.delenv("HARDCOVER_API_TOKEN", raising=False)
+    response = client.get("/books/search?q=dune")
+    assert response.status_code == 200
+    assert response.json()["books"][0]["isbn"] == catalog.isbn
+    assert response.json()["books"][0]["series"] is None
+    assert response.json()["partial"] is True
+
+
+def test_title_only_route_uses_unique_credited_book(client: TestClient, catalogs, monkeypatch):
+    catalogs[0].return_value = [BOOK.model_copy(update={"isbn": None, "source": "google_books"})]
+    catalogs[5].side_effect = enrich_catalog_books
+    monkeypatch.setenv("HARDCOVER_API_TOKEN", "private-test-token")
+    client_type = httpx.AsyncClient
+    ids = [1]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        if "SearchBooks" in payload["query"]:
+            return httpx.Response(200, json={"data": {"search": {"ids": ids}}})
+        assert "BookMemberships" in payload["query"]
+        assert payload["variables"] == {"ids": ids}
+        return httpx.Response(200, json={"data": {"books": [{
+            "id": book_id, "title": "Dune", "canonical_id": None, "is_partial_book": False,
+            "compilation": False,
+            "contributions": [{"contribution": "Author", "author": {"name": "Frank Herbert"}}],
+            "featured_book_series": {"position": None, "compilation": False,
+                "series": {"id": 31, "name": "Dune Saga", "canonical_id": None}},
+            "book_series": [],
+        } for book_id in ids]}})
+
+    with patch("hon.services.hardcover.httpx.AsyncClient",
+               side_effect=lambda **options: client_type(transport=httpx.MockTransport(handle), **options)):
+        unique = client.get("/books/search?q=dune")
+        assert unique.json()["books"][0]["series"] == {
+            "id": "31", "name": "Dune Saga", "position": None,
+        }
+        _cache.clear()
+        ids.append(2)
+        ambiguous = client.get("/books/search?q=dune")
+        assert ambiguous.status_code == 200
+        assert ambiguous.json()["books"][0]["series"] is None
+        assert ambiguous.json()["partial"] is False
 
 
 def test_series_only_search_is_successful(client: TestClient, catalogs):

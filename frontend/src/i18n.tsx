@@ -43,7 +43,6 @@ const en = {
     addEdition: "Add edition",
     includeOptional: "Include optional books",
     addSeries: "Add series",
-    seriesBook: (position: string) => `Book ${position}`,
     seriesCounts: (total: number, main: number, optional: number) =>
       `${total} book${total === 1 ? "" : "s"} found · ${main} main · ${optional} optional`,
     unnumbered: "Unnumbered",
@@ -211,7 +210,6 @@ const pt: Copy = {
     addEdition: "Adicionar edição",
     includeOptional: "Incluir livros opcionais",
     addSeries: "Adicionar série",
-    seriesBook: (position: string) => `Livro ${position}`,
     seriesCounts: (total: number, main: number, optional: number) =>
       `${total} livro${total === 1 ? "" : "s"} encontrado${total === 1 ? "" : "s"} · ${main} ${main === 1 ? "principal" : "principais"} · ${optional} ${optional === 1 ? "opcional" : "opcionais"}`,
     unnumbered: "Sem número",
