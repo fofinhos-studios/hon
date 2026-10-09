@@ -704,6 +704,11 @@ ul {
   flex: 1 1 100%;
   padding: 0;
 }
+.book-search__work-heading .book-search__series-count {
+  flex-basis: 100%;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 .book-search__series-option {
   display: inline-flex;
   align-items: center;
