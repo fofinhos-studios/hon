@@ -6,11 +6,18 @@ import { safeImageUrl } from "./book-visuals";
 
 type CoverBook = Pick<
   Book,
-  "title" | "cover_url" | "cover_fallback_url" | "isbn" | "id"
+  | "kind"
+  | "title"
+  | "author"
+  | "cover_url"
+  | "cover_fallback_url"
+  | "isbn"
+  | "id"
 >;
 type ImagePriority = "high" | "eager";
 const FAILED_IMAGE_TTL_MS = 5 * 60 * 1000;
 const MAX_FAILED_IMAGES = 128;
+const MAX_COVER_QUERY_LENGTH = 200;
 const failedImageUrls = new Map<string, number>();
 
 export function clearImageFailureCache(): void {
@@ -30,16 +37,34 @@ function rememberFailure(url: string): void {
   }
 }
 
-function coverSources(book: CoverBook) {
+function available(url: string | undefined, failed: string[]): boolean {
+  return !!url && !failed.includes(url) && !recentlyFailed(url);
+}
+
+function coverSource(book: CoverBook, failed: string[]): string | undefined {
+  const primary = safeImageUrl(book.cover_url);
+  if (available(primary, failed)) return primary;
+  const catalog = safeImageUrl(book.cover_fallback_url);
+  if (available(catalog, failed)) return catalog;
   const isbn = (book.isbn || book.id.replace(/^isbn:/, "")).replace(
     /[\s-]/g,
     "",
   );
-  return [
-    safeImageUrl(book.cover_url),
-    safeImageUrl(book.cover_fallback_url),
-    /^\d{13}$/.test(isbn) ? `/api/books/cover?isbn=${isbn}` : undefined,
-  ];
+  const isbnQuery = /^\d{13}$/.test(isbn) ? `isbn=${isbn}` : "";
+  const workQuery =
+    book.kind === "page" &&
+    book.title.length <= MAX_COVER_QUERY_LENGTH &&
+    book.author.length <= MAX_COVER_QUERY_LENGTH &&
+    book.title.trim() &&
+    book.author.trim()
+      ? `title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}`
+      : "";
+  const query =
+    isbnQuery && workQuery
+      ? `${isbnQuery}&${workQuery}`
+      : isbnQuery || workQuery;
+  const fallback = query ? `/api/books/cover?${query}` : undefined;
+  return available(fallback, failed) ? fallback : undefined;
 }
 
 export function BookCover({
@@ -51,9 +76,7 @@ export function BookCover({
 }) {
   const { copy } = useLanguage();
   const [failed, setFailed] = useState<string[]>([]);
-  const src = coverSources(book).find(
-    (url) => url && !failed.includes(url) && !recentlyFailed(url),
-  );
+  const src = coverSource(book, failed);
   return src ? (
     <img
       class="book-cover"
@@ -96,10 +119,8 @@ export function BookBackdrop({
 }) {
   const [failed, setFailed] = useState<string[]>([]);
   if (book.background_hidden) return null;
-  const src = [
-    safeImageUrl(book.visuals?.artwork?.image_url),
-    ...coverSources(book),
-  ].find((url) => url && !failed.includes(url) && !recentlyFailed(url));
+  const artwork = safeImageUrl(book.visuals?.artwork?.image_url);
+  const src = available(artwork, failed) ? artwork : coverSource(book, failed);
   return src ? (
     <img
       class="book-backdrop"

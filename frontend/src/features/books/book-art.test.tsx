@@ -41,11 +41,16 @@ test("failed art falls back to the cover and then to the graphic surface", () =>
   fireEvent.error(art);
   expect(view.container.querySelector("img")?.src).toContain("cover.jpg");
   fireEvent.error(art);
+  expect(view.container.querySelector("img")?.src).toContain(
+    "/api/books/cover?",
+  );
+  fireEvent.error(art);
   expect(view.container.querySelector("img")).toBeNull();
 });
 
 test("failed cover has a readable placeholder; hidden background has no image", () => {
   const cover = render(<BookCover book={book} />);
+  fireEvent.error(cover.getByRole("img"));
   fireEvent.error(cover.getByRole("img"));
   expect(cover.getByLabelText("No cover for Book")).toBeTruthy();
   cover.unmount();
@@ -83,11 +88,13 @@ test("cover failure tries the same ISBN fallback before showing a placeholder", 
   fireEvent.error(img);
   expect(img.getAttribute("src")).toContain("isbn.jpg");
   fireEvent.error(img);
+  expect(img.getAttribute("src")).toContain("/api/books/cover?");
+  fireEvent.error(img);
   expect(view.getByLabelText("No cover for Book")).toBeTruthy();
   view.unmount();
 });
 
-test("recovers a saved ISBN edition from its publisher after catalog images fail", () => {
+test("recovers a saved ISBN edition after catalog images fail", () => {
   const view = render(
     <BookCover
       book={{
@@ -100,7 +107,7 @@ test("recovers a saved ISBN edition from its publisher after catalog images fail
   fireEvent.error(view.getByAltText("Cover of Book"));
   fireEvent.error(view.getByAltText("Cover of Book"));
   expect(view.getByAltText("Cover of Book").getAttribute("src")).toBe(
-    "/api/books/cover?isbn=9786559240630",
+    "/api/books/cover?isbn=9786559240630&title=Book&author=Author",
   );
   fireEvent.error(view.getByAltText("Cover of Book"));
   expect(view.getByLabelText("No cover for Book")).toBeTruthy();
@@ -112,8 +119,41 @@ test("a book with no catalog cover can load its exact ISBN cover", () => {
     <BookCover book={{ ...book, isbn: "9786559240630", cover_url: null }} />,
   );
   expect(view.getByAltText("Cover of Book").getAttribute("src")).toBe(
+    "/api/books/cover?isbn=9786559240630&title=Book&author=Author",
+  );
+  view.unmount();
+});
+
+test("a book without an ISBN can load a matching work cover", () => {
+  const view = render(<BookCover book={{ ...book, cover_url: null }} />);
+  expect(view.getByAltText("Cover of Book").getAttribute("src")).toBe(
+    "/api/books/cover?title=Book&author=Author",
+  );
+  view.unmount();
+});
+
+test("long optional metadata does not block a valid ISBN cover", () => {
+  const view = render(
+    <BookCover
+      book={{
+        ...book,
+        title: "A".repeat(201),
+        isbn: "9786559240630",
+        cover_url: null,
+      }}
+    />,
+  );
+  expect(view.getByRole("img").getAttribute("src")).toBe(
     "/api/books/cover?isbn=9786559240630",
   );
+  view.unmount();
+});
+
+test("audiobooks without an ISBN do not borrow a print book cover", () => {
+  const view = render(
+    <BookCover book={{ ...book, kind: "audiobook", cover_url: null }} />,
+  );
+  expect(view.getByLabelText("No cover for Book")).toBeTruthy();
   view.unmount();
 });
 

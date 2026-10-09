@@ -16,7 +16,7 @@ from hon.services.catalog import folded, isbn_value, rank_books, work_key
 from hon.services.google_books import search as search_google_books
 from hon.services.hardcover import SeriesProviderError, search_series
 from hon.services.open_library import search as search_open_library
-from hon.services.publisher_cover import get_publisher_cover
+from hon.services.publisher_cover import get_book_cover
 
 router = APIRouter(prefix="/books", tags=["books"])
 logger = logging.getLogger(__name__)
@@ -31,11 +31,21 @@ async def book_visuals(book: VisualRequest) -> BookVisuals:
 
 
 @router.get("/cover")
-async def book_cover(isbn: str = Query(..., min_length=10, max_length=20)):
-    code = isbn_value(isbn)
-    if not code:
+async def book_cover(
+    isbn: str | None = Query(None, min_length=10, max_length=20),
+    title: str | None = Query(None, min_length=1, max_length=MAX_QUERY_LENGTH),
+    author: str | None = Query(None, min_length=1, max_length=MAX_QUERY_LENGTH),
+):
+    code = isbn_value(isbn) if isbn is not None else None
+    if isbn is not None and not code:
         raise HTTPException(status_code=422, detail="Invalid ISBN")
-    url = await get_publisher_cover(code)
+    if (title is None) != (author is None):
+        raise HTTPException(status_code=422, detail="Invalid title or author")
+    if title is not None and author is not None and (not folded(title) or not folded(author)):
+        raise HTTPException(status_code=422, detail="Invalid title or author")
+    if not code and title is None:
+        raise HTTPException(status_code=422, detail="ISBN or title and author required")
+    url = await get_book_cover(code, title, author)
     if not url:
         raise HTTPException(status_code=404, detail="Cover unavailable", headers={"Cache-Control": "no-store"})
     return RedirectResponse(url, headers={"Cache-Control": "public, max-age=3600"})

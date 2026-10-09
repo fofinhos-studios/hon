@@ -223,6 +223,7 @@ test("shows the edition cover and an accessible placeholder in the schedule", ()
   expect(
     view.getByAltText("Cover of First Book").getAttribute("src"),
   ).toContain("edition.jpg");
+  fireEvent.error(view.getByAltText("Cover of Second Book"));
   expect(view.getByLabelText("No cover for Second Book")).toBeTruthy();
 });
 
