@@ -54,53 +54,42 @@ def test_search_survives_a_provider_failure(client: TestClient, catalogs):
 
 @pytest.mark.parametrize(("error", "status"), [(httpx.ReadTimeout("timeout"), 504), (httpx.ConnectError("bad"), 502)])
 def test_search_maps_outages(client: TestClient, catalogs, error, status):
-    for catalog in catalogs:
+    for catalog in catalogs[:4]:
         catalog.side_effect = error
     assert client.get("/books/search?q=dune").status_code == status
 
 @pytest.mark.parametrize("query", ["The Wheel of Time", "Wheel of Time"])
-def test_plain_search_returns_series_before_ordinary_books(client: TestClient, catalogs, query):
-    member = BOOK.model_copy(
-        update={
-            "id": "hardcover:17",
-            "title": "The Eye of the World",
-            "source": "hardcover",
-            "series": SeriesMembership(id="5", name="The Wheel of Time", position=1),
-        }
-    )
-    unrelated = member.model_copy(update={
-        "id": "hardcover:18",
-        "series": SeriesMembership(id="6", name="Wheel of Fortune", position=1),
+def test_series_search_restricts_relevance_without_catalog_lookup(client: TestClient, catalogs, query):
+    member = BOOK.model_copy(update={
+        "id": "hardcover:17", "title": "The Eye of the World", "source": "hardcover",
+        "series": SeriesMembership(id="5", name="The Wheel of Time", position=1),
     })
     catalogs[4].return_value = [
+        SeriesResult(id="6", name="Wheel of Fortune", author="Another Writer", members=[], incomplete=False),
         SeriesResult(id="5", name="The Wheel of Time", author="Robert Jordan", members=[member], incomplete=False),
-        SeriesResult(id="6", name="Wheel of Fortune", author="Another Writer", members=[unrelated], incomplete=False),
     ]
-    catalogs[0].return_value = [BOOK.model_copy(update={"title": query})]
-    response = client.get("/books/search", params={"q": query})
+    response = client.get("/series/search", params={"q": query})
     assert response.status_code == 200
+    assert response.json()["books"] == []
     assert [item["name"] for item in response.json()["series"]] == ["The Wheel of Time"]
     assert response.json()["series"][0]["members"][0]["series"]["position"] == 1
-    assert response.json()["books"][0]["title"] == query
+    assert response.json()["source"] == "hardcover"
     catalogs[4].assert_awaited_once_with(query)
+    for catalog in (*catalogs[:4], catalogs[5]):
+        catalog.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
-    ("query", "catalog_title", "series_name", "book_titles", "series_names", "source"),
+    ("query", "series_name", "series_names"),
     [
-        ("The Eye of the World", "The Eye of the World", "Tales of Starlight",
-         ["The Eye of the World"], [], "google_books"),
-        ("Wheel", None, "The Wheel of Time", ["First Tale"], ["The Wheel of Time"], "hardcover"),
-        ("In the End", "In the End", "The End", ["In the End"], [], "google_books"),
+        ("The Eye of the World", "Tales of Starlight", []),
+        ("Wheel", "The Wheel of Time", ["The Wheel of Time"]),
+        ("In the End", "The End", []),
     ],
 )
-def test_exact_book_title_excludes_unrelated_series_but_partial_series_remains(
-    client: TestClient, catalogs, monkeypatch, query, catalog_title, series_name, book_titles, series_names, source,
+def test_series_provider_results_are_filtered_without_catalog(
+    client: TestClient, catalogs, monkeypatch, query, series_name, series_names,
 ):
-    catalogs[0].return_value = (
-        [BOOK.model_copy(update={"title": catalog_title, "author": "Robert Jordan"})]
-        if catalog_title else []
-    )
     catalogs[4].side_effect = search_series
     monkeypatch.setenv("HARDCOVER_API_TOKEN", "private-test-token")
     client_type = httpx.AsyncClient
@@ -122,32 +111,35 @@ def test_exact_book_title_excludes_unrelated_series_but_partial_series_remains(
 
     with patch("hon.services.hardcover.httpx.AsyncClient",
                side_effect=lambda **options: client_type(transport=httpx.MockTransport(handle), **options)):
-        response = client.get("/books/search", params={"q": query})
+        response = client.get("/series/search", params={"q": query})
     assert response.status_code == 200
-    assert [book["title"] for book in response.json()["books"]] == book_titles
+    assert response.json()["books"] == []
     assert [item["name"] for item in response.json()["series"]] == series_names
-    assert response.json()["source"] == source
+    assert response.json()["source"] == "hardcover"
     assert response.json()["partial"] is False
+    for catalog in (*catalogs[:4], catalogs[5]):
+        catalog.assert_not_awaited()
 
 
-def test_search_preserves_ordinary_books_when_series_fails(client: TestClient, catalogs):
+def test_book_search_is_independent_of_series_outage(client: TestClient, catalogs):
     catalogs[0].return_value = [BOOK]
     catalogs[4].side_effect = SeriesProviderError("unauthorized")
     response = client.get("/books/search?q=dune")
     assert response.status_code == 200
-    assert response.json()["books"][0]["title"] == "Dune"
+    assert [book["title"] for book in response.json()["books"]] == ["Dune"]
     assert response.json()["series"] == []
-    assert response.json()["partial"] is True
+    assert response.json()["partial"] is False
+    catalogs[4].assert_not_awaited()
 
 
-def test_empty_catalog_stays_available_when_series_token_missing(client: TestClient, catalogs):
+def test_empty_catalog_is_independent_of_missing_series_token(client: TestClient, catalogs):
     catalogs[4].side_effect = SeriesProviderError("missing token")
     response = client.get("/books/search?q=obscure")
     assert response.status_code == 200
     assert response.json()["books"] == []
     assert response.json()["series"] == []
-    assert response.json()["partial"] is True
-
+    assert response.json()["partial"] is False
+    catalogs[4].assert_not_awaited()
 
 def test_catalog_isbn_enrichment_round_trip_and_failed_enrichment(client: TestClient, catalogs, monkeypatch):
     isbn = "9780441172719"
@@ -200,7 +192,6 @@ def test_catalog_isbn_enrichment_round_trip_and_failed_enrichment(client: TestCl
 def test_missing_token_leaves_existing_catalog_editions_intact(client: TestClient, catalogs, monkeypatch):
     catalog = BOOK.model_copy(update={"isbn": "9780441172719", "source": "google_books"})
     catalogs[0].return_value = [catalog]
-    catalogs[4].side_effect = SeriesProviderError("not configured")
     catalogs[5].side_effect = enrich_catalog_books
     monkeypatch.delenv("HARDCOVER_API_TOKEN", raising=False)
     response = client.get("/books/search?q=dune")
@@ -257,22 +248,66 @@ def test_series_only_search_is_successful(client: TestClient, catalogs):
     catalogs[4].return_value = [
         SeriesResult(id="5", name="Dune", author="Frank Herbert", members=[member], incomplete=False)
     ]
-    response = client.get("/books/search?q=dune")
+    book_response = client.get("/books/search?q=dune")
+    assert book_response.status_code == 200
+    assert book_response.json()["books"] == []
+    assert book_response.json()["series"] == []
+    catalogs[4].assert_not_awaited()
+    response = client.get("/series/search?q=dune")
     assert response.status_code == 200
     assert response.json()["source"] == "hardcover"
-    assert [book["id"] for book in response.json()["books"]] == ["hardcover:17"]
+    assert response.json()["books"] == []
     assert response.json()["series"][0]["members"][0]["id"] == "hardcover:17"
 
 
 def test_search_validates_query(client: TestClient):
-    for params in ({}, {"q": "lo"}, {"q": "   "}, {"q": "..."}, {"q": "a" * 201}):
-        assert client.get("/books/search", params=params).status_code == 422
+    for path in ("/books/search", "/series/search"):
+        for params in ({}, {"q": "lo"}, {"q": "   "}, {"q": "..."}, {"q": "a" * 201}):
+            assert client.get(path, params=params).status_code == 422
 
 
 def test_search_strips_query(client: TestClient, catalogs):
     catalogs[0].return_value = [BOOK]
     assert client.get("/books/search", params={"q": "  dune  "}).status_code == 200
     catalogs[0].assert_awaited_once_with("dune")
+
+
+def test_series_search_strips_query_and_uses_folded_cache(client: TestClient, catalogs):
+    catalogs[4].return_value = [SeriesResult(
+        id="5", name="Café", author="Writer", members=[], incomplete=False,
+    )]
+    assert client.get("/series/search", params={"q": "  Café  "}).status_code == 200
+    cached = client.get("/series/search", params={"q": "cafe", "edition_type": "audiobook"})
+    assert [item["id"] for item in cached.json()["series"]] == ["5"]
+    catalogs[4].assert_awaited_once_with("Café")
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [(SeriesProviderError("missing token"), 502), (httpx.ConnectError("offline"), 502),
+     (httpx.ReadTimeout("slow"), 504)],
+)
+def test_series_search_maps_provider_failures_without_catalog_fallback(client: TestClient, catalogs, error, status):
+    catalogs[0].return_value = [BOOK]
+    catalogs[4].side_effect = error
+    assert client.get("/series/search?q=dune").status_code == status
+    catalogs[0].assert_not_awaited()
+    catalogs[5].assert_not_awaited()
+    catalogs[4].side_effect = None
+    catalogs[4].return_value = []
+    assert client.get("/series/search?q=dune").status_code == 200
+    assert catalogs[4].await_count == 2
+
+
+def test_series_search_enforces_timeout(client: TestClient, catalogs):
+    async def slow_search(_query):
+        await asyncio.sleep(1)
+
+    catalogs[4].side_effect = slow_search
+    with patch("hon.routers.books.SERIES_TIMEOUT_SECONDS", 0.01):
+        assert client.get("/series/search?q=dune").status_code == 504
+    for catalog in (*catalogs[:4], catalogs[5]):
+        catalog.assert_not_awaited()
 
 
 def test_search_cache_ignores_accents_and_case(client: TestClient, catalogs):
@@ -356,7 +391,7 @@ def test_edition_filter_validates_and_caches_each_subset(client: TestClient, cat
     assert catalogs[0].await_count == 4
 
 
-def test_series_books_keep_all_paginated_volumes_beyond_catalog_cutoff(client: TestClient, catalogs):
+def test_series_members_remain_only_in_series_response_without_truncation(client: TestClient, catalogs):
     members = [
         BOOK.model_copy(update={
             "id": f"hardcover:{number}", "source": "hardcover", "title": f"Dune Volume {number}",
@@ -364,175 +399,81 @@ def test_series_books_keep_all_paginated_volumes_beyond_catalog_cutoff(client: T
         })
         for number in range(1, 106)
     ]
-    catalogs[4].return_value = [SeriesResult(id="5", name="Dune", author="Frank Herbert",
-                                             members=members, incomplete=False)]
-    response = client.get("/books/search?q=dune")
-    assert response.status_code == 200
-    assert len(response.json()["series"][0]["members"]) == 105
-    assert len(response.json()["books"]) == 105
-    assert {book["id"] for book in response.json()["books"]} == {book.id for book in members}
-    assert all(book["series"]["id"] == "5" for book in response.json()["books"])
-
-
-def test_series_member_merges_catalog_isbn_and_keeps_membership(client: TestClient, catalogs):
-    isbn = "9780441172719"
-    catalog = BOOK.model_copy(update={"id": "catalog", "source": "google_books", "isbn": isbn,
-                                       "cover_url": "https://cover.test/catalog"})
-    member = catalog.model_copy(update={"id": "hardcover:7", "source": "hardcover", "cover_url": None,
-                                        "series": SeriesMembership(id="5", name="Dune", position=1)})
-    catalogs[0].return_value = [catalog]
-    catalogs[4].return_value = [SeriesResult(id="5", name="Dune", author="Frank Herbert",
-                                             members=[member], incomplete=False)]
-    response = client.get("/books/search?q=dune")
-    assert response.status_code == 200
-    assert len(response.json()["books"]) == 1
-    merged = response.json()["books"][0]
-    assert merged["id"] == "catalog"
-    assert merged["cover_url"] == catalog.cover_url
-    assert merged["series"]["position"] == 1
-
-
-def test_series_positions_with_reused_isbn_do_not_collapse(client: TestClient, catalogs):
-    members = [
-        BOOK.model_copy(update={
-            "id": f"hardcover:{position}", "source": "hardcover",
-            "title": f"Dune Volume {position}", "isbn": "9780441172719",
-            "series": SeriesMembership(id="5", name="Dune", position=position),
-        })
-        for position in (1, 2)
-    ]
-    catalogs[4].return_value = [SeriesResult(id="5", name="Dune", author="Frank Herbert",
-                                             members=members, incomplete=False)]
-    response = client.get("/books/search?q=dune")
-    assert len(response.json()["books"]) == 2
-    assert {book["series"]["position"] for book in response.json()["books"]} == {1, 2}
-
-
-def test_series_member_without_isbn_enriches_unique_catalog_work(client: TestClient, catalogs):
-    catalog = BOOK.model_copy(update={"id": "catalog", "source": "google_books",
-                                       "cover_url": "https://cover.test/catalog"})
-    member = catalog.model_copy(update={"id": "hardcover:7", "source": "hardcover",
-                                        "cover_url": None, "series": SeriesMembership(id="5", name="Dune", position=1)})
-    catalogs[0].return_value = [catalog]
-    catalogs[4].return_value = [SeriesResult(id="5", name="Dune", author="Frank Herbert",
-                                             members=[member], incomplete=False)]
-    response = client.get("/books/search?q=dune")
-    assert [book["id"] for book in response.json()["books"]] == ["catalog"]
-    assert response.json()["books"][0]["series"]["id"] == "5"
-    assert response.json()["books"][0]["cover_url"] == catalog.cover_url
-
-
-@pytest.mark.parametrize(
-    ("catalog_update", "member_update"),
-    [
-        ({"page_count": 380}, {"page_count": 412}),
-        ({"format": "digital"}, {"format": "physical"}),
-    ],
-)
-@pytest.mark.parametrize("catalog_isbn", [None, "9780441172719"])
-def test_isbnless_series_member_does_not_attach_to_conflicting_catalog_edition(
-    client: TestClient, catalogs, catalog_update, member_update, catalog_isbn,
-):
-    catalog = BOOK.model_copy(update={
-        "id": "catalog", "source": "google_books", "language": "en",
-        "isbn": catalog_isbn, **catalog_update,
-    })
-    member = BOOK.model_copy(update={
-        "id": "hardcover:7", "source": "hardcover", "language": "en",
-        "series": SeriesMembership(id="5", name="Dune", position=1), **member_update,
-    })
-    catalogs[0].return_value = [catalog]
     catalogs[4].return_value = [SeriesResult(
-        id="5", name="Dune", author="Frank Herbert", members=[member], incomplete=False,
+        id="5", name="Dune", author="Frank Herbert", members=members, incomplete=False,
     )]
-
-    response = client.get("/books/search?q=dune")
+    response = client.get("/series/search?q=dune")
     assert response.status_code == 200
-    editions = {book["id"]: book for book in response.json()["books"]}
-    assert set(editions) == {"catalog", "hardcover:7"}
-    assert editions["catalog"]["series"] is None
-    assert editions["hardcover:7"]["series"]["position"] == 1
-    assert editions["catalog"]["work_key"] == editions["hardcover:7"]["work_key"]
+    assert response.json()["books"] == []
+    assert [book["id"] for book in response.json()["series"][0]["members"]] == [book.id for book in members]
+    for catalog in (*catalogs[:4], catalogs[5]):
+        catalog.assert_not_awaited()
 
 
-@pytest.mark.parametrize("catalog_isbn", [None, "9780441172719"])
-def test_isbnless_series_member_with_matching_edition_metadata_merges(
-    client: TestClient, catalogs, catalog_isbn,
-):
+def test_book_search_never_includes_series_members_or_uses_series_cache(client: TestClient, catalogs):
     catalog = BOOK.model_copy(update={
-        "id": "catalog", "source": "google_books", "language": "en", "isbn": catalog_isbn,
-        "format": "physical", "cover_url": "https://cover.test/catalog",
+        "id": "catalog", "source": "google_books", "isbn": "9780441172719",
+        "cover_url": "https://cover.test/catalog",
     })
     member = catalog.model_copy(update={
-        "id": "hardcover:7", "source": "hardcover", "cover_url": None, "isbn": None,
+        "id": "hardcover:7", "source": "hardcover",
         "series": SeriesMembership(id="5", name="Dune", position=1),
     })
     catalogs[0].return_value = [catalog]
     catalogs[4].return_value = [SeriesResult(
         id="5", name="Dune", author="Frank Herbert", members=[member], incomplete=False,
     )]
-
+    series_response = client.get("/series/search?q=dune")
+    assert series_response.json()["books"] == []
+    assert series_response.json()["series"][0]["members"][0]["id"] == "hardcover:7"
     response = client.get("/books/search?q=dune")
     assert response.status_code == 200
-    assert [book["id"] for book in response.json()["books"]] == ["catalog"]
-    assert response.json()["books"][0]["series"]["position"] == 1
-    assert response.json()["books"][0]["cover_url"] == catalog.cover_url
+    assert [item["id"] for item in response.json()["books"]] == ["catalog"]
+    assert response.json()["series"] == []
+    assert response.json()["books"][0]["series"] is None
+    catalogs[4].assert_awaited_once_with("dune")
+    catalogs[5].assert_awaited_once()
 
 
-@pytest.mark.parametrize(
-    ("edition_type", "expected_member"),
-    [("physical", "hardcover:physical"), ("digital", "hardcover:digital"),
-     ("unspecified", "hardcover:unspecified")],
-)
-def test_edition_filter_excludes_other_formats_from_series_and_flat_books(
-    client: TestClient, catalogs, edition_type, expected_member,
-):
-    members = [
-        BOOK.model_copy(update={
-            "id": f"hardcover:{format_name}", "source": "hardcover",
-            "title": f"Dune Volume {position}", "format": format_name,
-            "series": SeriesMembership(id="5", name="Dune", position=position),
-        })
-        for position, format_name in enumerate(("physical", "digital", "unspecified"), start=1)
-    ]
-    physical_only = BOOK.model_copy(update={
-        "id": "hardcover:other", "source": "hardcover", "format": "physical",
-        "title": "Dune Companion",
-        "series": SeriesMembership(id="6", name="Dune", position=1),
-    })
+def test_series_search_ranks_exact_title_before_partial_matches(client: TestClient, catalogs):
     catalogs[4].return_value = [
-        SeriesResult(id="5", name="Dune", author="Frank Herbert", members=members, incomplete=False),
-        SeriesResult(id="6", name="Dune", author="Frank Herbert", members=[physical_only], incomplete=False),
+        SeriesResult(id="1", name="Dune Chronicles", author="A", members=[], incomplete=False),
+        SeriesResult(id="2", name="The Dune", author="B", members=[], incomplete=False),
+        SeriesResult(id="3", name="Legend of Dunedin", author="C", members=[], incomplete=False),
+        SeriesResult(id="4", name="Beyond Dune", author="D", members=[], incomplete=False),
     ]
+    response = client.get("/series/search?q=dune")
+    assert [item["id"] for item in response.json()["series"]] == ["2", "1", "4"]
 
-    response = client.get("/books/search", params={"q": "dune", "edition_type": edition_type})
-    assert response.status_code == 200
-    series = {item["id"]: item for item in response.json()["series"]}
-    assert [member["id"] for member in series["5"]["members"]] == [expected_member]
-    assert series["5"]["incomplete"] is True
-    assert set(series) == ({"5", "6"} if edition_type == "physical" else {"5"})
-    if edition_type == "physical":
-        assert series["6"]["incomplete"] is False
-    expected_books = {expected_member} | ({"hardcover:other"} if edition_type == "physical" else set())
-    assert {book["id"] for book in response.json()["books"]} == expected_books
 
-    unfiltered = client.get("/books/search?q=dune").json()
-    assert [member["id"] for member in unfiltered["series"][0]["members"]] == [
-        member.id for member in members
+def test_book_edition_filter_does_not_limit_series_members(client: TestClient, catalogs):
+    members = [
+        BOOK.model_copy(update={"id": f"hardcover:{kind}", "format": kind})
+        for kind in ("physical", "digital")
     ]
-    assert unfiltered["series"][0]["incomplete"] is False
-    assert {item["id"] for item in unfiltered["series"]} == {"5", "6"}
+    catalogs[4].return_value = [SeriesResult(
+        id="5", name="Dune", author="Frank Herbert", members=members, incomplete=False,
+    )]
+    books = client.get("/books/search?q=dune&edition_type=physical")
+    assert books.status_code == 200
+    assert books.json()["books"] == []
+    assert books.json()["series"] == []
+    series = client.get("/series/search?q=dune")
+    assert [item["id"] for item in series.json()["series"][0]["members"]] == [
+        "hardcover:physical", "hardcover:digital",
+    ]
+    assert series.json()["series"][0]["incomplete"] is False
 
 
-def test_unusable_catalog_and_series_entries_are_not_flat_books(client: TestClient, catalogs):
-    empty = BOOK.model_copy(update={"id": "empty", "author": "Unknown", "page_count": None,
-                                    "cover_fallback_url": "https://fallback.test/cover"})
+def test_unusable_catalog_entries_are_not_flat_books(client: TestClient, catalogs):
+    empty = BOOK.model_copy(update={
+        "id": "empty", "author": "Unknown", "page_count": None,
+        "cover_fallback_url": "https://fallback.test/cover",
+    })
     catalogs[0].return_value = [empty, BOOK]
-    catalogs[4].return_value = [SeriesResult(id="5", name="Dune", author="Unknown",
-                                             members=[empty], incomplete=True)]
     response = client.get("/books/search?q=dune")
     assert [item["id"] for item in response.json()["books"]] == ["1"]
-    assert response.json()["series"][0]["members"][0]["id"] == "empty"
+    assert response.json()["series"] == []
 
 
 def test_enrichment_is_bounded_without_truncating_catalog_results(client: TestClient, catalogs):

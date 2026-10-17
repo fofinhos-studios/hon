@@ -27,6 +27,7 @@ class BookResult(BaseModel):
     publisher: str | None = None
     published_date: str | None = None
     series: SeriesMembership | None = None
+    popularity: int | None = Field(default=None, ge=0, exclude=True)
 
 
 class AudiobookResult(BaseModel):

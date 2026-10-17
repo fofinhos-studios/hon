@@ -16,7 +16,7 @@ SEARCH_LIMIT = 20
 SEARCH_TIMEOUT_SECONDS = 6.0
 LANGUAGES = {"pt": "por", "en": "eng", "es": "spa", "fr": "fre", "de": "ger"}
 FIELDS = (
-    "key,title,author_name,editions,editions.key,editions.title,editions.language,"
+    "key,title,author_name,ratings_count,editions,editions.key,editions.title,editions.language,"
     "editions.isbn,editions.cover_i,editions.publisher,editions.publish_date"
 )
 
@@ -37,11 +37,13 @@ def normalize(doc: dict) -> BookResult | None:
     language = next((code for code, iso3 in LANGUAGES.items() if iso3 in languages), None)
     publishers = edition.get("publisher") or []
     dates = edition.get("publish_date") or []
+    ratings_count = doc.get("ratings_count")
     return BookResult(
         source="open_library",
         id=key.removeprefix("/books/").removeprefix("/works/"),
         title=title,
         author=first_author(doc.get("author_name")),
+        popularity=ratings_count if type(ratings_count) is int and ratings_count >= 0 else None,
         page_count=positive_page_count(edition.get("number_of_pages")),
         cover_url=OPENLIBRARY_COVER_URL.format(cover_id=cover_id)
         if isinstance(cover_id, int) and cover_id > 0

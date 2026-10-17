@@ -8,31 +8,40 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
-from hon.models.book import AudiobookResult, BookResult, SearchResult, SeriesResult
+from hon.models.book import AudiobookResult, BookResult, SearchResult
 from hon.models.visuals import BookVisuals, VisualRequest
 from hon.services.audiosilo import search as search_audiosilo
 from hon.services.book_visuals import get_visuals
 from hon.services.bookinfo import search as search_bookinfo
-from hon.services.catalog import folded, isbn_value, rank_books, usable, work_key
+from hon.services.catalog import folded, isbn_value, rank_books, work_key
 from hon.services.google_books import search as search_google_books
 from hon.services.hardcover import SeriesProviderError, enrich_catalog_books, search_series
 from hon.services.open_library import search as search_open_library
 from hon.services.publisher_cover import get_book_cover
 
 router = APIRouter(prefix="/books", tags=["books"])
+series_router = APIRouter(prefix="/series", tags=["series"])
 logger = logging.getLogger(__name__)
 MAX_QUERY_LENGTH = 200
 SEARCH_DEADLINE_SECONDS = 12.0
 CATALOG_TIMEOUT_SECONDS = 6.0
 SERIES_TIMEOUT_SECONDS = 8.0
 ENRICHMENT_TIMEOUT_SECONDS = 2.0
-_cache: OrderedDict[tuple[str, str | None], tuple[float, SearchResult]] = OrderedDict()
+_cache: OrderedDict[tuple[str, str, str | None], tuple[float, SearchResult]] = OrderedDict()
 
 
 def _series_title_key(value: str) -> str:
     title = folded(value)
     first, separator, rest = title.partition(" ")
     return rest if separator and first in {"a", "an", "the", "o", "os", "as", "um", "uma", "uns", "umas"} else title
+
+
+def _validated_query(value: str) -> tuple[str, str]:
+    query = value.strip()
+    normalized = folded(query)
+    if len(query) < 3 or not normalized:
+        raise HTTPException(status_code=422, detail="Search query must contain at least 3 characters")
+    return query, normalized
 
 
 @router.post("/visuals", response_model=BookVisuals)
@@ -66,10 +75,8 @@ async def search_books(
     q: str = Query(..., min_length=3, max_length=MAX_QUERY_LENGTH),
     edition_type: str | None = Query(default=None, pattern="^(physical|digital|unspecified|audiobook)$"),
 ) -> SearchResult:
-    query = q.strip()
-    if len(query) < 3 or not folded(query):
-        raise HTTPException(status_code=422, detail="Search query must contain at least 3 characters")
-    key = folded(query), edition_type
+    query, normalized = _validated_query(q)
+    key = ("books", normalized, edition_type)
     cached = _cache.get(key)
     if cached and cached[0] > monotonic():
         _cache.move_to_end(key)
@@ -79,11 +86,45 @@ async def search_books(
             result = await _search_catalogs(query, edition_type)
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="Book search timed out") from exc
+    _cache_result(key, result)
+    return result
+
+
+@series_router.get("/search", response_model=SearchResult)
+async def search_hardcover_series(
+    q: str = Query(..., min_length=3, max_length=MAX_QUERY_LENGTH),
+) -> SearchResult:
+    query, normalized = _validated_query(q)
+    key = ("series", normalized, None)
+    cached = _cache.get(key)
+    if cached and cached[0] > monotonic():
+        _cache.move_to_end(key)
+        return cached[1]
+    try:
+        async with asyncio.timeout(SEARCH_DEADLINE_SECONDS):
+            async with asyncio.timeout(SERIES_TIMEOUT_SECONDS):
+                series = await search_series(query)
+    except (httpx.TimeoutException, TimeoutError) as exc:
+        raise HTTPException(status_code=504, detail="Series search timed out") from exc
+    except (httpx.HTTPError, SeriesProviderError) as exc:
+        logger.warning("Hardcover series search unavailable (%s)", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Series search unavailable. Try again.") from exc
+    name_key = _series_title_key(query)
+    matches = [item for item in series if f" {name_key} " in f" {_series_title_key(item.name)} "]
+    matches.sort(key=lambda item: (
+        _series_title_key(item.name) != name_key,
+        not _series_title_key(item.name).startswith(f"{name_key} "),
+    ))
+    result = SearchResult(books=[], series=matches, source="hardcover", partial=False)
+    _cache_result(key, result)
+    return result
+
+
+def _cache_result(key: tuple[str, str, str | None], result: SearchResult) -> None:
     _cache[key] = (monotonic() + (300 if (result.books or result.series) and not result.partial else 15), result)
     _cache.move_to_end(key)
     while len(_cache) > 128:
         _cache.popitem(last=False)
-    return result
 
 
 async def _search_catalogs(query: str, edition_type: str | None = None) -> SearchResult:
@@ -97,23 +138,16 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
         providers.extend((("google_books", search_google_books), ("open_library", search_open_library)))
     if edition_type in (None, "audiobook"):
         providers.append(("audiosilo", search_audiosilo))
-    series_providers: list[tuple[str, Callable[[str], Awaitable[list[SeriesResult]]]]] = (
-        [] if edition_type == "audiobook" else [("hardcover", search_series)]
-    )
+
 
     async def run[T](search: Callable[[str], Awaitable[T]], timeout: float) -> T:
         async with asyncio.timeout(timeout):
             return await search(query)
 
-    book_results, series_results = await asyncio.gather(
-        asyncio.gather(*(run(search, CATALOG_TIMEOUT_SECONDS) for _, search in providers), return_exceptions=True),
-        asyncio.gather(
-            *(run(search, SERIES_TIMEOUT_SECONDS) for _, search in series_providers),
-            return_exceptions=True,
-        ),
+    book_results = await asyncio.gather(
+        *(run(search, CATALOG_TIMEOUT_SECONDS) for _, search in providers), return_exceptions=True
     )
     books: list[BookResult | AudiobookResult] = []
-    series: list[SeriesResult] = []
     sources = []
     errors = []
     successes = 0
@@ -128,33 +162,7 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
             if result:
                 books.extend(result)
                 sources.append(name)
-    for (name, _), result in zip(series_providers, series_results, strict=True):
-        if isinstance(result, BaseException):
-            if not isinstance(result, (httpx.HTTPError, TimeoutError, SeriesProviderError)):
-                raise result
-            logger.warning("%s search unavailable (%s)", name, type(result).__name__)
-            errors.append(result)
-        else:
-            successes += 1
-            if result:
-                series.extend(result)
     ranked: list[BookResult | AudiobookResult] = rank_books(query, books, limit=None)
-    query_title = folded(query)
-    if any(folded(book.title) == query_title for book in ranked):
-        name_key = _series_title_key(query)
-        series = [item for item in series if _series_title_key(item.name) == name_key]
-    if edition_type in ("physical", "digital", "unspecified"):
-        filtered_series = []
-        for item in series:
-            matching_members = [member for member in item.members if member.format == edition_type]
-            if matching_members:
-                filtered_series.append(item.model_copy(update={
-                    "members": matching_members,
-                    "incomplete": item.incomplete or len(matching_members) != len(item.members),
-                }))
-        series = filtered_series
-    if series:
-        sources.append("hardcover")
     candidates = [
         book for book in ranked
         if isinstance(book, BookResult) and book.source != "hardcover" and not book.series
@@ -169,48 +177,14 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
         except (httpx.HTTPError, TimeoutError, SeriesProviderError) as exc:
             logger.warning("Hardcover membership unavailable (%s)", type(exc).__name__)
             errors.append(exc)
-    members = [member for item in series for member in item.members if usable(member)]
-    if members:
-        for member in members:
-            if member.isbn:
-                continue
-            matches = [
-                (index, book) for index, book in enumerate(ranked)
-                if isinstance(book, BookResult)
-                and folded(book.title) == folded(member.title)
-                and folded(book.author) == folded(member.author)
-                and (not member.language or not book.language or member.language == book.language)
-                and (book.page_count is None or member.page_count is None or book.page_count == member.page_count)
-                and (book.format == "unspecified" or member.format == "unspecified" or book.format == member.format)
-                and (
-                    not book.published_date or not member.published_date
-                    or folded(book.published_date) == folded(member.published_date)
-                )
-                and (not book.publisher or not member.publisher or folded(book.publisher) == folded(member.publisher))
-                and (
-                    not book.series or not member.series
-                    or (book.series.id == member.series.id and (
-                        book.series.position is None or member.series.position is None
-                        or book.series.position == member.series.position
-                    ))
-                )
-            ]
-            if len(matches) == 1:
-                index, match = matches[0]
-                ranked[index] = match.model_copy(update={"series": match.series or member.series})
-            else:
-                ranked.append(member)
-        ranked = rank_books(
-            query, ranked + [member for member in members if member.isbn], include_unrelated=True, limit=None
-        )
+
     ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in ranked]
     if edition_type == "audiobook":
         ranked = [book for book in ranked if isinstance(book, AudiobookResult)]
-        series = []
     elif edition_type is not None:
         ranked = [book for book in ranked if isinstance(book, BookResult) and book.format == edition_type]
     if not successes:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")
     source = sources[0] if len(sources) == 1 else "combined"
-    return SearchResult(books=ranked, series=series, source=source, partial=bool(errors))
+    return SearchResult(books=ranked, series=[], source=source, partial=bool(errors))

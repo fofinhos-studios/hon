@@ -35,14 +35,45 @@ def test_normalize_handles_missing_cover():
     assert book.cover_url is None
 
 
+def test_normalize_uses_work_ratings_without_losing_edition_metadata():
+    value = {
+        **document(),
+        "ratings_count": 13572,
+        "author_name": ["R. F. Kuang"],
+        "editions": {
+            "docs": [
+                {
+                    "key": "/books/OL2M",
+                    "title": "Babel",
+                    "language": ["por"],
+                    "ratings_count": 1,
+                }
+            ]
+        },
+    }
+    book = normalize(value)
+    assert book is not None
+    assert (book.id, book.language, book.author, book.popularity) == ("OL2M", "pt", "R. F. Kuang", 13572)
+
+
+@pytest.mark.parametrize(
+    ("ratings_count", "expected"),
+    [(0, 0), (True, None), (False, None), ("500", None), (-1, None), (1.5, None), (None, None)],
+)
+def test_normalize_accepts_only_nonnegative_integer_work_ratings(ratings_count, expected):
+    book = normalize({**document(), "ratings_count": ratings_count})
+    assert book is not None
+    assert book.popularity == expected
+
+
 @pytest.mark.asyncio
 async def test_search_returns_normalized_documents():
-    with patch(
-        "hon.services.open_library.httpx.AsyncClient",
-        return_value=async_client({"docs": [document()]}, {"docs": []}),
-    ):
+    client = async_client({"docs": [{**document(), "ratings_count": 4291}]}, {"docs": []})
+    with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
         books = await search("dune")
     assert [book.id for book in books] == ["OL1W"]
+    assert books[0].popularity == 4291
+    assert "ratings_count" in client.get.call_args_list[0].kwargs["params"]["fields"].split(",")
 
 
 @pytest.mark.asyncio
