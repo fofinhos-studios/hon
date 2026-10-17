@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { SearchApiError, searchBooks } from "../../services/api";
+import { SearchApiError, searchBooks, searchSeries } from "../../services/api";
 import type { EditionType } from "../../services/api";
 import type { SearchBook, SearchSeries } from "../../types";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
 export type SearchErrorCode = "invalid" | "timeout" | "unavailable" | "unknown";
+export type SearchMode = "books" | "series";
 
-export function useBookSearch(search = searchBooks) {
+export function useBookSearch(
+  search = searchBooks,
+  searchForSeries = searchSeries,
+) {
   const [query, setQueryState] = useState("");
+  const [mode, setModeState] = useState<SearchMode>("books");
   const [editionType, setEditionTypeState] = useState<EditionType | null>(null);
   const queryRef = useRef("");
+  const modeRef = useRef<SearchMode>("books");
   const editionTypeRef = useRef<EditionType | null>(null);
   const [results, setResults] = useState<SearchBook[]>([]);
   const [series, setSeries] = useState<SearchSeries[]>([]);
@@ -49,7 +55,11 @@ export function useBookSearch(search = searchBooks) {
   }, [cancelCurrentSearch]);
 
   const runSearch = useCallback(
-    (value: string, selectedEditionType: EditionType | null) => {
+    (
+      value: string,
+      selectedEditionType: EditionType | null,
+      selectedMode: SearchMode,
+    ) => {
       cancelCurrentSearch();
       const trimmed = value.trim();
       const requestId = requestIdRef.current;
@@ -70,20 +80,24 @@ export function useBookSearch(search = searchBooks) {
         const controller = new AbortController();
         controllerRef.current = controller;
         try {
+          const response =
+            selectedMode === "books"
+              ? await search(trimmed, {
+                  signal: controller.signal,
+                  ...(selectedEditionType
+                    ? { edition_type: selectedEditionType }
+                    : {}),
+                })
+              : await searchForSeries(trimmed, { signal: controller.signal });
+          if (requestId !== requestIdRef.current) return;
           const {
             books,
             series: matches,
             source,
             partial: incomplete,
-          } = await search(trimmed, {
-            signal: controller.signal,
-            ...(selectedEditionType
-              ? { edition_type: selectedEditionType }
-              : {}),
-          });
-          if (requestId !== requestIdRef.current) return;
-          setResults(books);
-          setSeries(matches ?? []);
+          } = response;
+          setResults(selectedMode === "books" ? books : []);
+          setSeries(selectedMode === "series" ? (matches ?? []) : []);
           setPartial(!!incomplete);
           setSearched(true);
           setUsingFallback(source === "open_library");
@@ -108,21 +122,29 @@ export function useBookSearch(search = searchBooks) {
         }
       }, SEARCH_DEBOUNCE_MS);
     },
-    [cancelCurrentSearch, search],
+    [cancelCurrentSearch, search, searchForSeries],
   );
 
   const setQuery = (value: string) => {
     queryRef.current = value;
     setQueryState(value);
-    runSearch(value, editionTypeRef.current);
+    runSearch(value, editionTypeRef.current, modeRef.current);
   };
   const setEditionType = (value: EditionType | null) => {
     if (editionTypeRef.current === value) return;
     editionTypeRef.current = value;
     setEditionTypeState(value);
-    runSearch(queryRef.current, value);
+    if (modeRef.current === "books")
+      runSearch(queryRef.current, value, "books");
+  };
+  const setMode = (value: SearchMode) => {
+    if (modeRef.current === value) return;
+    modeRef.current = value;
+    setModeState(value);
+    runSearch(queryRef.current, editionTypeRef.current, value);
   };
   return {
+    mode,
     query,
     editionType,
     results,
@@ -135,6 +157,7 @@ export function useBookSearch(search = searchBooks) {
     usingFallback,
     setQuery,
     setEditionType,
+    setMode,
     reset,
   };
 }

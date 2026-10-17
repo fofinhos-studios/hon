@@ -50,7 +50,7 @@ describe("BookSearchResults", () => {
     expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
       1,
     );
-    expect(view.getByText("English")).toBeTruthy();
+    expect(view.queryByText("English")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: /Dune.*2 editions/i }));
     const options = view
       .getByRole("dialog")
@@ -62,32 +62,107 @@ describe("BookSearchResults", () => {
     expect(onSelect).toHaveBeenCalledWith(book, [book, english]);
   });
 
-  test("does not attach unknown-language editions to ambiguous translations", () => {
+  test("shows Babel translations together without combining other authors or titles", () => {
     const english: SearchBook = {
       ...book,
-      id: "english",
+      id: "babel-en",
+      title: "Babel",
+      author: "R. F. Kuang",
       language: "en",
-      work_key: "dune|frank herbert|en",
+      format: "physical",
+      work_key: "babel|r f kuang|en",
+      cover_url: "https://example.com/babel-en.jpg",
+    };
+    const digital: SearchBook = {
+      ...english,
+      id: "babel-ebook",
+      format: "digital",
+      work_key: "",
     };
     const portuguese: SearchBook = {
-      ...book,
-      id: "portuguese",
+      ...english,
+      id: "babel-pt",
+      title: "Bábel",
+      author: "R.F. Kuang",
       language: "pt",
-      work_key: "dune|frank herbert|pt",
+      publisher: "Intrínseca",
+      work_key: "babel|r f kuang|pt",
+      cover_url: null,
     };
+    const audio: SearchBook = {
+      ...english,
+      id: "babel-audio",
+      kind: "audiobook",
+      source: "audiosilo",
+      duration_minutes: 300,
+      narrators: ["Reader"],
+      work_key: "legacy-key",
+    };
+    const anotherAuthor: SearchBook = {
+      ...english,
+      id: "other-babel",
+      author: "Other Author",
+      work_key: english.work_key,
+    };
+    const anotherTitle: SearchBook = {
+      ...english,
+      id: "yellowface",
+      title: "Yellowface",
+      work_key: english.work_key,
+    };
+    const onSelect = vi.fn();
     const view = render(
       <BookSearchResults
-        results={[book, english, portuguese]}
-        onSelect={() => {}}
+        results={[
+          english,
+          anotherAuthor,
+          digital,
+          anotherTitle,
+          portuguese,
+          audio,
+        ]}
+        onSelect={onSelect}
       />,
     );
-    expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
-      3,
-    );
+    const cards = view.container.querySelectorAll(".book-search__work");
+    expect(cards).toHaveLength(3);
     expect(
-      view.container.querySelectorAll(".edition-picker__option"),
-    ).toHaveLength(0);
-    expect(view.getAllByText("1 edition")).toHaveLength(3);
+      [...cards].map(
+        (card) => card.querySelector(".book-search__result-title")?.textContent,
+      ),
+    ).toEqual(["Babel", "Babel", "Yellowface"]);
+    expect(cards[0].textContent).toContain("R. F. Kuang");
+    expect(cards[0].textContent).toContain("4 editions");
+    expect(cards[0].textContent).not.toContain("English");
+    expect(cards[0].textContent).not.toContain("Portuguese");
+    expect(cards[0].querySelector("img")?.getAttribute("src")).toBe(
+      "https://example.com/babel-en.jpg",
+    );
+    fireEvent.click(
+      view.getByRole("button", { name: /Babel.*R\. F\. Kuang.*4 editions/ }),
+    );
+    const options = view
+      .getByRole("dialog", { name: /choose edition.*babel/i })
+      .querySelectorAll<HTMLButtonElement>(".edition-picker__option");
+    expect(options).toHaveLength(4);
+    expect([...options].map((option) => option.textContent)).toEqual([
+      expect.stringContaining("Physical"),
+      expect.stringContaining("Digital"),
+      expect.stringContaining("Portuguese"),
+      expect.stringContaining("Audiobook"),
+    ]);
+    expect(options[0].textContent).toContain("English");
+    expect(options[1].textContent).toContain("English");
+    expect(options[2].textContent).toContain("Portuguese");
+    expect(options[2].textContent).toContain("Intrínseca");
+    fireEvent.click(options[2]);
+    expect(onSelect).toHaveBeenCalledWith(portuguese, [
+      english,
+      digital,
+      portuguese,
+      audio,
+    ]);
+    expect(view.queryByRole("dialog")).toBeNull();
   });
 
   test("shows language and publisher to distinguish editions", () => {
@@ -147,22 +222,22 @@ describe("BookSearchResults", () => {
       />,
     );
     expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
-      2,
+      1,
     );
     expect(
       view.container.querySelectorAll(".book-search__result"),
-    ).toHaveLength(2);
-    expect(view.getByText("3 editions")).toBeTruthy();
+    ).toHaveLength(1);
+    expect(view.getByText("4 editions")).toBeTruthy();
     expect(
       view.container
         .querySelector(".book-search__work img")
         ?.getAttribute("src"),
     ).toBe("https://example.com/recording.jpg");
-    fireEvent.click(view.getByRole("button", { name: /Dune.*3 editions/i }));
+    fireEvent.click(view.getByRole("button", { name: /Dune.*4 editions/i }));
     const dialog = view.getByRole("dialog", { name: /choose edition.*dune/i });
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.hasAttribute("open")).toBe(true);
-    expect(dialog.querySelectorAll(".edition-picker__option")).toHaveLength(3);
+    expect(dialog.querySelectorAll(".edition-picker__option")).toHaveLength(4);
     expect(document.activeElement).toBe(
       dialog.querySelector(".edition-picker__option"),
     );
@@ -170,8 +245,45 @@ describe("BookSearchResults", () => {
     fireEvent.click(
       view.getByRole("button", { name: /Audiobook.*300 minutes/i }),
     );
-    expect(onSelect).toHaveBeenCalledWith(audio, [english, audio, digital]);
+    expect(onSelect).toHaveBeenCalledWith(audio, [
+      english,
+      audio,
+      digital,
+      portuguese,
+    ]);
     expect(view.queryByRole("dialog")).toBeNull();
+  });
+
+  test("keeps the edition picker and focus when the first translation changes", () => {
+    const english: SearchBook = {
+      ...book,
+      id: "babel-en",
+      title: "Babel",
+      author: "R. F. Kuang",
+      language: "en",
+      work_key: "babel|r f kuang|en",
+    };
+    const portuguese: SearchBook = {
+      ...english,
+      id: "babel-pt",
+      author: "R.F. Kuang",
+      language: "pt",
+      work_key: "babel|r f kuang|pt",
+    };
+    const view = render(
+      <BookSearchResults results={[english, portuguese]} onSelect={() => {}} />,
+    );
+    const trigger = view.getByRole("button", { name: /Babel.*2 editions/i });
+    trigger.focus();
+    fireEvent.click(trigger);
+    view.rerender(
+      <BookSearchResults results={[portuguese, english]} onSelect={() => {}} />,
+    );
+    const dialog = view.getByRole("dialog");
+    expect(dialog.querySelectorAll(".edition-picker__option")).toHaveLength(2);
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(view.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   test("traps keyboard focus and restores the trigger on Escape and overlay click", () => {

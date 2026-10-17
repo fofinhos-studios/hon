@@ -481,9 +481,9 @@ ul {
 /* Planner: timetable controls in a single shared strip. */
 .reading-planner__controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 0.85fr) minmax(
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr) minmax(0, 0.9fr) minmax(
       0,
-      1.2fr
+      1.4fr
     );
   gap: var(--space-6);
 }
@@ -533,12 +533,18 @@ ul {
   cursor: pointer;
 }
 .reading-planner__method-group {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.reading-planner__method-title > span:not(.hon-icon, .hon-tooltip) {
+  white-space: nowrap;
 }
 .reading-planner__method-btn {
-  flex: 1;
   min-width: 0;
+  min-height: var(--target);
   padding-inline: var(--space-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 .reading-planner__method-btn + .reading-planner__method-btn {
   border-left: 0;
@@ -558,6 +564,37 @@ ul {
 /* Catalog: manual addition opens next to search only when requested. */
 .book-search {
   margin-bottom: var(--space-8);
+}
+.book-search__categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: var(--rule);
+}
+.book-search__category {
+  min-height: var(--target);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.book-search__category + .book-search__category {
+  border-left: var(--rule);
+}
+.book-search__category[aria-pressed="true"] {
+  background: var(--selected-surface);
+  color: var(--selected-foreground);
+}
+.book-search__category:hover:not([aria-pressed="true"]) {
+  background: var(--surface-subtle);
+}
+.book-search__category:focus-visible {
+  outline-offset: -4px;
 }
 .book-search__entry-row {
   display: flex;
@@ -1476,7 +1513,7 @@ ul {
     padding-left: 0;
   }
 }
-@media (max-width: 1199px) {
+@media (max-width: 1359px) {
   .reading-planner__controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1517,6 +1554,9 @@ ul {
   .reading-planner__controls .reading-planner__label label {
     white-space: normal;
   }
+  .reading-planner__method-title > span:not(.hon-icon, .hon-tooltip) {
+    white-space: normal;
+  }
   .reading-planner__controls
     > .reading-planner__section
     + .reading-planner__section {
@@ -1526,6 +1566,13 @@ ul {
   }
 }
 @media (max-width: 639px) {
+  .reading-planner__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reading-planner__controls > .reading-planner__section:nth-child(n + 2) {
+    border-top: var(--rule);
+    padding-top: var(--space-3);
+  }
   .hon-brand-subtitle {
     display: none;
   }

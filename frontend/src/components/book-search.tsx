@@ -9,6 +9,7 @@ import { useBookSearch } from "../features/books/use-book-search";
 import { useLanguage } from "../i18n";
 import {
   searchBooks as defaultSearchBooks,
+  searchSeries as defaultSearchSeries,
   getBookVisuals,
   prefetchBookVisuals,
 } from "../services/api";
@@ -19,15 +20,17 @@ interface Props {
   onAdd: (book: Book) => void;
   onAddBooks: (books: Book[]) => void;
   searchBooks?: typeof defaultSearchBooks;
+  searchSeries?: typeof defaultSearchSeries;
 }
 
 export function BookSearch({
   onAdd,
   onAddBooks,
   searchBooks = defaultSearchBooks,
+  searchSeries = defaultSearchSeries,
 }: Props) {
   const { copy } = useLanguage();
-  const search = useBookSearch(searchBooks);
+  const search = useBookSearch(searchBooks, searchSeries);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualPages, setManualPages] = useState("");
@@ -154,37 +157,69 @@ export function BookSearch({
     <div class="book-search">
       <section class="book-search__section" aria-labelledby="book-search-title">
         <p class="book-search__subtitle hon-mono" id="book-search-title">
-          {copy.search.title}
+          {search.mode === "books"
+            ? copy.search.title
+            : copy.search.seriesTitle}
         </p>
         <fieldset
-          class="book-search__filters"
-          aria-label={copy.search.filterEdition}
+          class="book-search__categories"
+          aria-label={copy.search.category}
         >
-          <legend class="book-search__filter-label hon-mono">
-            {copy.search.filterEdition}
-          </legend>
-          <div class="book-search__filter-options">
-            {(
-              [
-                [null, copy.search.allFormats],
-                ["physical", copy.books.physical],
-                ["digital", copy.books.digital],
-                ["unspecified", copy.search.unspecified],
-                ["audiobook", copy.books.audiobook],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value ?? "all"}
-                type="button"
-                class="book-search__filter"
-                aria-pressed={search.editionType === value}
-                onClick={() => search.setEditionType(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {(
+            [
+              ["books", copy.search.booksCategory],
+              ["series", copy.search.seriesCategory],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              class="book-search__category"
+              aria-pressed={search.mode === mode}
+              onClick={() => {
+                if (search.mode === mode) return;
+                setManualOpen(false);
+                setPendingBook(null);
+                setPendingEditions([]);
+                setEditionPages("");
+                search.setMode(mode);
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </fieldset>
+        {search.mode === "books" && (
+          <fieldset
+            class="book-search__filters"
+            aria-label={copy.search.filterEdition}
+          >
+            <legend class="book-search__filter-label hon-mono">
+              {copy.search.filterEdition}
+            </legend>
+            <div class="book-search__filter-options">
+              {(
+                [
+                  [null, copy.search.allFormats],
+                  ["physical", copy.books.physical],
+                  ["digital", copy.books.digital],
+                  ["unspecified", copy.search.unspecified],
+                  ["audiobook", copy.books.audiobook],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value ?? "all"}
+                  type="button"
+                  class="book-search__filter"
+                  aria-pressed={search.editionType === value}
+                  onClick={() => search.setEditionType(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <div class="book-search__entry-row">
           <div class="book-search__input-wrap">
             <Icon
@@ -197,21 +232,30 @@ export function BookSearch({
               class="hon-input book-search__input"
               ref={searchInput}
               type="search"
-              placeholder={copy.search.placeholder}
+              placeholder={
+                search.mode === "books"
+                  ? copy.search.placeholder
+                  : copy.search.seriesPlaceholder
+              }
               value={search.query}
               onInput={(e) =>
                 search.setQuery((e.target as HTMLInputElement).value)
               }
-              aria-label={copy.search.label}
+              aria-label={
+                search.mode === "books"
+                  ? copy.search.label
+                  : copy.search.seriesLabel
+              }
               aria-busy={search.loading}
               aria-autocomplete="list"
               aria-controls={
-                [
-                  search.series.length > 0 && "book-series-results",
-                  search.results.length > 0 && "book-search-results",
-                ]
-                  .filter(Boolean)
-                  .join(" ") || undefined
+                search.mode === "books"
+                  ? search.results.length > 0
+                    ? "book-search-results"
+                    : undefined
+                  : search.series.length > 0
+                    ? "book-series-results"
+                    : undefined
               }
             />
             {search.loading ? (
@@ -232,23 +276,25 @@ export function BookSearch({
               </button>
             ) : null}
           </div>
-          <button
-            type="button"
-            class="hon-btn book-search__manual-toggle"
-            aria-label={copy.search.addManually}
-            aria-expanded={manualOpen}
-            aria-controls={manualOpen ? "book-manual-form" : undefined}
-            onClick={() => {
-              if (!manualOpen) setManualTitle(search.query);
-              setManualOpen((value) => !value);
-            }}
-          >
-            <Icon name="plus" size={16} />
-            <span>{copy.search.addManually}</span>
-          </button>
+          {search.mode === "books" && (
+            <button
+              type="button"
+              class="hon-btn book-search__manual-toggle"
+              aria-label={copy.search.addManually}
+              aria-expanded={manualOpen}
+              aria-controls={manualOpen ? "book-manual-form" : undefined}
+              onClick={() => {
+                if (!manualOpen) setManualTitle(search.query);
+                setManualOpen((value) => !value);
+              }}
+            >
+              <Icon name="plus" size={16} />
+              <span>{copy.search.addManually}</span>
+            </button>
+          )}
         </div>
 
-        {manualOpen && (
+        {search.mode === "books" && manualOpen && (
           <form
             id="book-manual-form"
             class="book-search__manual"
@@ -324,33 +370,41 @@ export function BookSearch({
         )}
 
         <BookSearchStatus
-          key={`${search.query}:${search.editionType ?? "all"}`}
+          key={`${search.mode}:${search.query}:${search.editionType ?? "all"}`}
           loading={search.loading}
           error={search.error}
           errorCode={search.errorCode}
           resultCount={
-            groupSearchResults(search.results).length + search.series.length
+            search.mode === "books"
+              ? groupSearchResults(search.results).length
+              : search.series.length
           }
         />
-        <SeriesSearchResults
-          series={search.series}
-          query={search.query}
-          onAddSeries={handleAddSeries}
-        />
-        <BookSearchResults results={search.results} onSelect={handleAdd} />
+        {search.mode === "series" ? (
+          <SeriesSearchResults
+            series={search.series}
+            query={search.query}
+            onAddSeries={handleAddSeries}
+          />
+        ) : (
+          <BookSearchResults results={search.results} onSelect={handleAdd} />
+        )}
         {search.partial && (
           <p class="book-search__status">{copy.search.partial}</p>
         )}
         {search.searched &&
-          search.results.length === 0 &&
-          search.series.length === 0 &&
+          (search.mode === "books"
+            ? search.results.length === 0
+            : search.series.length === 0) &&
           !search.partial &&
           !search.error && (
             <p class="book-search__status" aria-live="polite">
-              {copy.search.noResults}
+              {search.mode === "books"
+                ? copy.search.noResults
+                : copy.search.noSeriesResults}
             </p>
           )}
-        {pendingBook && (
+        {search.mode === "books" && pendingBook && (
           <form
             class="book-search__edition"
             onSubmit={(event) => {

@@ -21,8 +21,14 @@ const en = {
   madeWithLove: "Made with love by 🧡💜",
   search: {
     title: "Find a book",
+    seriesTitle: "Find a series",
+    category: "Search category",
+    booksCategory: "Book",
+    seriesCategory: "Series",
     placeholder: "Title, author or ISBN",
     label: "Search books",
+    seriesPlaceholder: "Series title or author",
+    seriesLabel: "Search series",
     filterEdition: "Filter by edition",
     allFormats: "All",
     unspecified: "Unspecified",
@@ -43,6 +49,7 @@ const en = {
     cancel: "Cancel",
     partial: "Some catalogs are unavailable. Results may be incomplete.",
     noResults: "No books found. Try a title, author or ISBN.",
+    noSeriesResults: "No series found. Try a series title or author.",
     enterPages: (title: string) => `${title} — enter the page count.`,
     enterDuration: (title: string) =>
       `${title} — enter the duration in minutes.`,
@@ -203,8 +210,14 @@ const pt: Copy = {
   madeWithLove: "Feito com amor por 🧡💜",
   search: {
     title: "Encontre um livro",
+    seriesTitle: "Encontre uma série",
+    category: "Categoria de busca",
+    booksCategory: "Livro",
+    seriesCategory: "Série",
     placeholder: "Título, autor ou ISBN",
     label: "Buscar livros",
+    seriesPlaceholder: "Título da série ou autor",
+    seriesLabel: "Buscar séries",
     filterEdition: "Filtrar por edição",
     allFormats: "Todos",
     unspecified: "Não especificado",
@@ -226,6 +239,8 @@ const pt: Copy = {
     partial:
       "Alguns catálogos estão indisponíveis. Os resultados podem estar incompletos.",
     noResults: "Nenhum livro encontrado. Tente um título, autor ou ISBN.",
+    noSeriesResults:
+      "Nenhuma série encontrada. Tente o título da série ou o autor.",
     enterPages: (title: string) => `${title} — informe o número de páginas.`,
     enterDuration: (title: string) =>
       `${title} — informe a duração em minutos.`,

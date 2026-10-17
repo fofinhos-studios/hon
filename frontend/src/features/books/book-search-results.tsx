@@ -9,29 +9,32 @@ interface Props {
   onSelect: (edition: SearchBook, editions: SearchBook[]) => void;
 }
 
-export function groupSearchResults(results: SearchBook[]): SearchBook[][] {
-  const knownByWork = new Map<string, string | null>();
-  for (const book of results) {
-    if (!book.language || book.language === "und") continue;
-    const key =
-      book.work_key ||
-      `${book.title.toLowerCase()}|${book.author.toLowerCase()}|${book.language.toLowerCase()}`;
-    const base = key.slice(0, key.lastIndexOf("|"));
-    const previous = knownByWork.get(base);
-    if (previous === undefined) knownByWork.set(base, key);
-    else if (previous !== key) knownByWork.set(base, null);
-  }
+function normalizedWorkPart(value: string): string {
+  return (
+    value
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/\p{M}/gu, "")
+      .match(/[\p{L}\p{N}]+/gu)
+      ?.join(" ") ?? ""
+  );
+}
 
+function workGroupKey(book: SearchBook): string {
+  const title = normalizedWorkPart(
+    book.title.replace(/\s*\((?:unabridged|abridged|audiobook)\)\s*$/i, ""),
+  );
+  const author = normalizedWorkPart(book.author);
+  if (!title || !author || author === "unknown") {
+    return `${title}|${author}|${book.source}:${book.id}`;
+  }
+  return `${title}|${author}`;
+}
+
+export function groupSearchResults(results: SearchBook[]): SearchBook[][] {
   const groups = new Map<string, SearchBook[]>();
   for (const book of results) {
-    const originalKey =
-      book.work_key ||
-      `${book.title.toLowerCase()}|${book.author.toLowerCase()}|${book.language ?? "und"}`;
-    const base = originalKey.slice(0, originalKey.lastIndexOf("|"));
-    const key =
-      !book.language || book.language === "und"
-        ? knownByWork.get(base) || originalKey
-        : originalKey;
+    const key = workGroupKey(book);
     const group = groups.get(key) ?? [];
     group.push(book);
     groups.set(key, group);
@@ -45,7 +48,7 @@ export function BookSearchResults({ results, onSelect }: Props) {
   if (results.length === 0) return null;
   const groups = groupSearchResults(results);
   const selectedEditions = groups.find(
-    (editions) => (editions[0].work_key || editions[0].id) === selectedWork,
+    (editions) => workGroupKey(editions[0]) === selectedWork,
   );
   return (
     <>
@@ -60,17 +63,14 @@ export function BookSearchResults({ results, onSelect }: Props) {
               (edition) => edition.cover_url || edition.cover_fallback_url,
             ) ?? work;
           return (
-            <li
-              key={editions[0].work_key || editions[0].id}
-              class="book-search__work"
-            >
+            <li key={workGroupKey(editions[0])} class="book-search__work">
               <button
                 type="button"
                 class="book-search__result"
                 onClick={() =>
                   editions.length === 1
                     ? onSelect(work, editions)
-                    : setSelectedWork(editions[0].work_key || editions[0].id)
+                    : setSelectedWork(workGroupKey(editions[0]))
                 }
               >
                 <BookCover
@@ -80,11 +80,14 @@ export function BookSearchResults({ results, onSelect }: Props) {
                 <span class="book-search__result-main book-search__result-info">
                   <span class="book-search__result-title">{work.title}</span>
                   <span class="book-search__result-meta">{work.author}</span>
-                  {work.language && (
-                    <span class="book-search__result-meta">
-                      {languageName(work.language)}
-                    </span>
-                  )}
+                  {work.language &&
+                    editions.every(
+                      (edition) => edition.language === work.language,
+                    ) && (
+                      <span class="book-search__result-meta">
+                        {languageName(work.language)}
+                      </span>
+                    )}
                   {work.kind === "page" && work.series && (
                     <span class="hon-eyebrow book-search__result-series">
                       {copy.books.seriesPosition(
