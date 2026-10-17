@@ -44,6 +44,7 @@ def normalize(item: dict) -> BookResult | None:
         ),
         None,
     )
+    ratings_count = info.get("ratingsCount")
     return BookResult(
         source="google_books",
         format="digital"
@@ -52,6 +53,7 @@ def normalize(item: dict) -> BookResult | None:
         id=book_id,
         title=title,
         author=first_author(authors),
+        popularity=ratings_count if type(ratings_count) is int and ratings_count >= 0 else None,
         page_count=page_count,
         cover_url=cover_url,
         cover_fallback_url=f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false" if isbn else None,

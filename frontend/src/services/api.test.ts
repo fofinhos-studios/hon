@@ -1,7 +1,7 @@
 import "../test/setup";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { searchBooks } from "./api";
+import { searchBooks, searchSeries } from "./api";
 
 const originalFetch = globalThis.fetch;
 
@@ -88,6 +88,35 @@ describe("searchBooks", () => {
     await expect(searchBooks("dune")).rejects.toMatchObject({
       code: "timeout",
       message: "Book search timed out",
+    });
+  });
+});
+
+describe("searchSeries", () => {
+  test("requests the series endpoint with query and abort signal only", async () => {
+    const result = { books: [], series: [], source: "hardcover" };
+    const fetchMock = mockFetch({ ok: true, json: async () => result });
+    const controller = new AbortController();
+
+    await expect(
+      searchSeries("Dune & Messiah", { signal: controller.signal }),
+    ).resolves.toEqual(result);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/series/search?q=Dune+%26+Messiah",
+      { signal: controller.signal },
+    );
+  });
+
+  test("classifies series search failures like book search failures", async () => {
+    mockFetch({
+      ok: false,
+      status: 504,
+      json: async () => ({ detail: "Series search timed out" }),
+    });
+
+    await expect(searchSeries("dune")).rejects.toMatchObject({
+      code: "timeout",
+      message: "Series search timed out",
     });
   });
 });

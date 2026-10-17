@@ -62,9 +62,33 @@ def test_normalize_cover_uses_https():
     assert book.cover_url == "https://books.google.com/cover.jpg"
 
 
+def test_normalize_uses_volume_ratings_without_losing_edition_metadata():
+    value = item(title="Babel")
+    value["volumeInfo"].update(
+        {"ratingsCount": 2891, "language": "pt", "authors": ["R. F. Kuang"], "publisher": "Publisher"}
+    )
+    book = normalize(value)
+    assert book is not None
+    assert (book.language, book.author, book.publisher, book.popularity) == ("pt", "R. F. Kuang", "Publisher", 2891)
+
+
+@pytest.mark.parametrize(
+    ("ratings_count", "expected"),
+    [(0, 0), (True, None), (False, None), ("500", None), (-1, None), (1.5, None), (None, None)],
+)
+def test_normalize_accepts_only_nonnegative_integer_volume_ratings(ratings_count, expected):
+    value = item()
+    value["volumeInfo"]["ratingsCount"] = ratings_count
+    book = normalize(value)
+    assert book is not None
+    assert book.popularity == expected
+
+
 @pytest.mark.asyncio
 async def test_search_queries_once():
-    client = async_client({"items": [item("dune")]})
+    value = item("dune")
+    value["volumeInfo"]["ratingsCount"] = 5910
+    client = async_client({"items": [value]})
     with (
         patch.dict(os.environ, {"GOOGLE_BOOKS_API_KEY": "key"}),
         patch("hon.services.google_books.httpx.AsyncClient", return_value=client),
@@ -72,6 +96,7 @@ async def test_search_queries_once():
         books = await search("dune")
 
     assert [book.id for book in books] == ["dune"]
+    assert books[0].popularity == 5910
     assert client.get.call_count == 1
     assert client.get.call_args.kwargs["params"]["q"] == "dune"
     assert "langRestrict" not in client.get.call_args.kwargs["params"]

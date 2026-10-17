@@ -219,3 +219,15 @@ export async function searchBooks(
   if (!response.ok) throw await parseError(response, "Search failed");
   return response.json() as Promise<SearchResult>;
 }
+
+export async function searchSeries(
+  query: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<SearchResult> {
+  const params = new URLSearchParams({ q: query });
+  const response = await fetch(`${API_BASE}/series/search?${params}`, {
+    signal: options.signal,
+  });
+  if (!response.ok) throw await parseError(response, "Search failed");
+  return response.json() as Promise<SearchResult>;
+}

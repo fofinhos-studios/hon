@@ -14,7 +14,7 @@ export function ReadingMethodControl({ method, onChange }: Props) {
   const { copy } = useLanguage();
   return (
     <section class="reading-planner__section">
-      <p class="hon-section-title">
+      <p class="hon-section-title reading-planner__method-title">
         <Icon name="split" size={14} aria-hidden="true" />
         <span>{copy.planner.method}</span>
         <Tooltip content={copy.planner.methodTip} />

@@ -58,9 +58,13 @@ def relevance(query: str, book: SearchBook) -> float:
     return 0.89 * (0.7 * score + 0.3 * phrase_similarity)
 
 
-def work_key(book: SearchBook) -> str:
+def _work_identity(book: SearchBook) -> tuple[str, str]:
     title = re.sub(r"\s*\((?:unabridged|abridged|audiobook)\)\s*$", "", book.title, flags=re.I)
-    return "|".join((folded(title), folded(book.author), (book.language or "und").casefold()))
+    return folded(title), folded(book.author)
+
+
+def work_key(book: SearchBook) -> str:
+    return "|".join((*_work_identity(book), (book.language or "und").casefold()))
 
 
 def usable(book: SearchBook) -> bool:
@@ -178,6 +182,10 @@ def rank_books[T: BookResult | AudiobookResult](
                     updates["page_count"] = book.page_count
                 if existing.format == "unspecified" and book.format != "unspecified":
                     updates["format"] = book.format
+                if book.popularity is not None and (
+                    existing.popularity is None or book.popularity > existing.popularity
+                ):
+                    updates["popularity"] = book.popularity
             if isinstance(existing, AudiobookResult) and isinstance(book, AudiobookResult):
                 if existing.duration_minutes is None and book.duration_minutes is not None:
                     updates["duration_minutes"] = book.duration_minutes
@@ -203,5 +211,18 @@ def rank_books[T: BookResult | AudiobookResult](
             year.group() if year else "",
         )
 
-    ranked = sorted(unique, key=order, reverse=True)
-    return ranked[:limit] if limit is not None else ranked
+    # Rank works before editions: one well-supported edition represents the work,
+    # while translations and formats remain separate, adjacent search results.
+    scored = [(_work_identity(book), order(book), book) for book in unique]
+    work_scores: dict[tuple[str, str], tuple] = {}
+    for identity, edition_score, book in scored:
+        score = (
+            edition_score[0],
+            book.popularity or 0 if isinstance(book, BookResult) else 0,
+            *edition_score[1:],
+        )
+        if identity not in work_scores or score > work_scores[identity]:
+            work_scores[identity] = score
+
+    ranked = sorted(scored, key=lambda item: (work_scores[item[0]], item[1]), reverse=True)
+    return [book for _, _, book in (ranked[:limit] if limit is not None else ranked)]

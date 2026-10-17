@@ -16,6 +16,17 @@ const searchBooksMock = vi.fn(
   }),
 );
 
+const searchSeriesMock = vi.fn(
+  async (
+    _query: string,
+    _options?: { signal?: AbortSignal },
+  ): Promise<SearchResult> => ({
+    books: [],
+    series: [],
+    source: "hardcover",
+  }),
+);
+
 afterEach(cleanup);
 
 beforeEach(() => {
@@ -25,10 +36,16 @@ beforeEach(() => {
     series: [],
     source: "google_books" as const,
   }));
+  searchSeriesMock.mockReset();
+  searchSeriesMock.mockImplementation(async () => ({
+    books: [],
+    series: [],
+    source: "hardcover",
+  }));
 });
 
 function SearchHarness() {
-  const search = useBookSearch(searchBooksMock);
+  const search = useBookSearch(searchBooksMock, searchSeriesMock);
   return (
     <div>
       <input
@@ -38,6 +55,12 @@ function SearchHarness() {
           search.setQuery((event.target as HTMLInputElement).value)
         }
       />
+      <button type="button" onClick={() => search.setMode("books")}>
+        Books
+      </button>
+      <button type="button" onClick={() => search.setMode("series")}>
+        Series
+      </button>
       <button type="button" onClick={() => search.setEditionType("physical")}>
         Physical
       </button>
@@ -55,6 +78,13 @@ function SearchHarness() {
       <span>{search.usingFallback ? "fallback" : "primary"}</span>
       <span>{search.error || "no error"}</span>
       <span data-testid="filter">{search.editionType ?? "all"}</span>
+      <span data-testid="mode">{search.mode}</span>
+      <span data-testid="partial">
+        {search.partial ? "partial" : "complete"}
+      </span>
+      <span data-testid="searched">
+        {search.searched ? "searched" : "not searched"}
+      </span>
     </div>
   );
 }
@@ -86,15 +116,7 @@ describe("useBookSearch", () => {
           cover_url: null,
         },
       ],
-      series: [
-        {
-          id: "one",
-          name: "Series One",
-          author: "Author",
-          members: [],
-          incomplete: false,
-        },
-      ],
+      series: [],
       source: "open_library",
     }));
     const view = render(<SearchHarness />);
@@ -106,13 +128,13 @@ describe("useBookSearch", () => {
       timeout: 700,
     });
     expect(view.getByText("fallback")).toBeTruthy();
-    expect(view.getByText("Series One")).toBeTruthy();
+    expect(searchSeriesMock).not.toHaveBeenCalled();
 
     fireEvent.click(view.getByRole("button", { name: "Reset" }));
 
     expect((view.getByLabelText("Query") as HTMLInputElement).value).toBe("");
     expect(view.queryByText("Dune")).toBeNull();
-    expect(view.queryByText("Series One")).toBeNull();
+    expect(view.getByTestId("searched").textContent).toBe("not searched");
     expect(view.getByText("primary")).toBeTruthy();
   });
 
@@ -226,22 +248,14 @@ describe("useBookSearch", () => {
           cover_url: null,
         },
       ],
-      series: [
-        {
-          id: "two",
-          name: "Series Two",
-          author: "Author",
-          members: [],
-          incomplete: false,
-        },
-      ],
+      series: [],
       source: "google_books",
     });
     rejectFirst?.(new Error("Search failed"));
 
     await waitFor(() => expect(view.getByText("Lord Test")).toBeTruthy());
     expect(view.getByText("no error")).toBeTruthy();
-    expect(view.getByText("Series Two")).toBeTruthy();
+    expect(searchSeriesMock).not.toHaveBeenCalled();
   });
 
   test("shows a search error for the active request", async () => {
@@ -302,7 +316,7 @@ describe("useBookSearch", () => {
     expect(signal?.aborted).toBe(true);
   });
   test("clears prior series on query edits and failed searches", async () => {
-    searchBooksMock
+    searchSeriesMock
       .mockResolvedValueOnce({
         books: [],
         series: [
@@ -318,6 +332,7 @@ describe("useBookSearch", () => {
       })
       .mockRejectedValueOnce(new Error("Provider unavailable"));
     const view = render(<SearchHarness />);
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
     const input = view.getByLabelText("Query");
     fireEvent.input(input, { target: { value: "first" } });
     await waitFor(() => expect(view.getByText("First series")).toBeTruthy());
@@ -327,5 +342,178 @@ describe("useBookSearch", () => {
       expect(view.getByText("Provider unavailable")).toBeTruthy(),
     );
     expect(view.queryByText("First series")).toBeNull();
+    expect(searchBooksMock).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Reset" }));
+    expect((view.getByLabelText("Query") as HTMLInputElement).value).toBe("");
+    expect(view.getByTestId("mode").textContent).toBe("series");
+    expect(view.getByTestId("searched").textContent).toBe("not searched");
+    expect(view.getByText("no error")).toBeTruthy();
+  });
+
+  test("rapid mode switches dispatch only the selected endpoint and retain the book filter", async () => {
+    const view = render(<SearchHarness />);
+    fireEvent.click(view.getByRole("button", { name: "Physical" }));
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "babel" },
+    });
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
+    fireEvent.click(view.getByRole("button", { name: "Books" }));
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
+
+    await waitFor(() => expect(searchSeriesMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    expect(searchSeriesMock).toHaveBeenCalledWith("babel", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(searchBooksMock).not.toHaveBeenCalled();
+    expect(view.getByTestId("filter").textContent).toBe("physical");
+    expect(view.getByTestId("mode").textContent).toBe("series");
+    fireEvent.click(view.getByRole("button", { name: "Digital" }));
+    expect(searchSeriesMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(view.getByRole("button", { name: "Books" }));
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    expect(searchBooksMock).toHaveBeenCalledWith("babel", {
+      signal: expect.any(AbortSignal),
+      edition_type: "digital",
+    });
+    expect((view.getByLabelText("Query") as HTMLInputElement).value).toBe(
+      "babel",
+    );
+  });
+
+  test("ignores a late book result after switching to series", async () => {
+    let resolveBook!: (value: SearchResult) => void;
+    let bookSignal: AbortSignal | undefined;
+    searchBooksMock.mockImplementation((_query, options) => {
+      bookSignal = options?.signal;
+      return new Promise<SearchResult>((resolve) => {
+        resolveBook = resolve;
+      });
+    });
+    searchSeriesMock.mockResolvedValue({
+      books: [],
+      series: [
+        {
+          id: "babel",
+          name: "Babel series",
+          author: "Author",
+          members: [],
+          incomplete: false,
+        },
+      ],
+      source: "hardcover",
+      partial: true,
+    });
+    const view = render(<SearchHarness />);
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "babel" },
+    });
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
+    expect(bookSignal?.aborted).toBe(true);
+    await waitFor(() => expect(view.getByText("Babel series")).toBeTruthy(), {
+      timeout: 700,
+    });
+    expect(view.getByTestId("partial").textContent).toBe("partial");
+    resolveBook({
+      books: [
+        {
+          id: "old",
+          title: "Old book",
+          author: "Author",
+          kind: "page",
+          format: "physical",
+          source: "google_books",
+          work_key: "old|author|und",
+          page_count: 100,
+          cover_url: null,
+        },
+      ],
+      series: [],
+      source: "google_books",
+    });
+    await Promise.resolve();
+    expect(view.queryByText("Old book")).toBeNull();
+    expect(view.getByText("Babel series")).toBeTruthy();
+    expect(view.getByTestId("mode").textContent).toBe("series");
+  });
+
+  test("a series failure and reset cannot leak results or errors across modes", async () => {
+    let rejectSeries!: (reason: Error) => void;
+    let seriesSignal: AbortSignal | undefined;
+    searchSeriesMock.mockImplementation((_query, options) => {
+      seriesSignal = options?.signal;
+      return new Promise<SearchResult>((_resolve, reject) => {
+        rejectSeries = reject;
+      });
+    });
+    const view = render(<SearchHarness />);
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "babel" },
+    });
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
+    await waitFor(() => expect(searchSeriesMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Books" }));
+    expect(seriesSignal?.aborted).toBe(true);
+    rejectSeries(new Error("Old series failure"));
+    await Promise.resolve();
+    expect(view.getByText("no error")).toBeTruthy();
+    expect(view.getByTestId("partial").textContent).toBe("complete");
+    fireEvent.click(view.getByRole("button", { name: "Reset" }));
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(view.getByTestId("searched").textContent).toBe("not searched");
+    expect(view.queryByText("Old series failure")).toBeNull();
+    expect(searchBooksMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("switching away from partial series results clears them before book failure", async () => {
+    searchSeriesMock.mockResolvedValue({
+      books: [],
+      series: [
+        {
+          id: "series",
+          name: "Series match",
+          author: "Author",
+          members: [],
+          incomplete: false,
+        },
+      ],
+      source: "hardcover",
+      partial: true,
+    });
+    searchBooksMock.mockRejectedValue(new Error("Book search failed"));
+    const view = render(<SearchHarness />);
+    fireEvent.click(view.getByRole("button", { name: "Series" }));
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "babel" },
+    });
+    await waitFor(() => expect(view.getByText("Series match")).toBeTruthy(), {
+      timeout: 700,
+    });
+    expect(view.getByTestId("partial").textContent).toBe("partial");
+    fireEvent.click(view.getByRole("button", { name: "Books" }));
+    expect(view.queryByText("Series match")).toBeNull();
+    expect(view.getByTestId("partial").textContent).toBe("complete");
+    expect(view.getByTestId("searched").textContent).toBe("not searched");
+    await waitFor(
+      () => expect(view.getByText("Book search failed")).toBeTruthy(),
+      { timeout: 700 },
+    );
+    expect(view.queryByText("Series match")).toBeNull();
+    expect(searchSeriesMock).toHaveBeenCalledTimes(1);
+    expect(searchBooksMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(view.getByRole("button", { name: "Reset" }));
+    expect(view.queryByText("Book search failed")).toBeNull();
+    expect(view.getByTestId("searched").textContent).toBe("not searched");
   });
 });

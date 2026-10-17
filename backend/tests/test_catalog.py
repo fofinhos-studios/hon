@@ -63,6 +63,58 @@ def test_exact_isbn_overrides_title_and_regional_ties():
     assert rank_books("978-0-06-302147-1", [translated, english]) == [english]
 
 
+def test_babel_editions_rank_together_ahead_of_older_same_title_authors():
+    portuguese = book(
+        "Babel", id="kuang-pt", author="R. F. Kuang", language="pt",
+        isbn="9786555607345", page_count=544, popularity=None, published_date="2023",
+    )
+    english = book(
+        "Babel", id="kuang-en", author="R.F. Kuang", language="en",
+        isbn="9780063021426", page_count=None, popularity=1800, published_date="2022",
+    )
+    paperback = book(
+        "Babel", id="kuang-paperback", author="R. F. Kuang", language="en",
+        isbn="9780063021433", format="physical", page_count=None,
+    )
+    old = book(
+        "Babel", id="old", author="Another Author", language="en",
+        isbn="9780063021440", page_count=650, popularity=4,
+        cover_url="https://covers.test/old", published_date="2025",
+    )
+    other = book(
+        "Babel", id="other", author="A Different Author", language="en",
+        isbn="9780063021457", page_count=420, published_date="2024",
+    )
+    ranked = rank_books("Babel", [old, english, other, portuguese, paperback], limit=None)
+    assert {item.id for item in ranked[:3]} == {"kuang-pt", "kuang-en", "kuang-paperback"}
+    assert {item.id for item in ranked[3:]} == {"old", "other"}
+    assert {item.language for item in ranked[:3]} == {"en", "pt"}
+
+
+def test_popularity_never_overrides_stronger_title_or_exact_isbn():
+    exact = book("Babel", id="exact", isbn="9780063021426", popularity=None)
+    sequel = book("Babel: A Sequel", id="sequel", isbn="9780063021433", popularity=100000)
+    assert rank_books("Babel", [sequel, exact])[0].id == "exact"
+    assert rank_books("9780063021426", [sequel, exact]) == [exact]
+    assert rank_books("Babl", [sequel, exact])[0].id == "exact"
+
+
+def test_popularity_is_validated_but_not_exposed_in_edition_response():
+    popular = book(popularity=50)
+    assert popular.popularity == 50
+    assert "popularity" not in popular.model_dump()
+    with pytest.raises(ValueError):
+        book(popularity=-1)
+
+
+def test_duplicate_edition_preserves_highest_provider_popularity():
+    first = book(id="first", popularity=9)
+    second = book(id="second", popularity=400)
+    ranked = rank_books("antes que o cafe esfrie", [first, second])
+    assert len(ranked) == 1
+    assert ranked[0].popularity == 400
+
+
 def test_merges_only_matching_isbn_and_keeps_better_metadata():
     first = book(author="Unknown", page_count=None)
     second = book(id="provider2", cover_url="https://covers.openlibrary.org/cover.jpg")
