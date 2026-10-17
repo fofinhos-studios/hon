@@ -10,3 +10,4 @@ docs/
 PLAN.md
 spec.md
 .serena/
+/.env
