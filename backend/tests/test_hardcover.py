@@ -296,6 +296,33 @@ async def test_optional_variants_deduplicate_across_different_positions(
 
 
 @pytest.mark.asyncio
+async def test_optional_variants_preserve_distinct_isbns_despite_matching_titles(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def edition(isbn: str) -> dict:
+        return {"id": 10, "pages": 200, "isbn_13": isbn, "language": {"code2": "en"}}
+
+    mock, _ = transport(
+        {
+            "first": [row(1, 1), row(2, 0, title="Companion",
+                        default_physical_edition=edition("9780441172719"))],
+            "alias": [row(11, 1), row(12, None, title="Companion",
+                        default_physical_edition=edition("9780061120084"))],
+        },
+        counts={"first": 1, "alias": 1},
+        series_info={
+            "first": (42, "The Saga", "The Author"),
+            "alias": (43, "the saga", "the author"),
+        },
+    )
+    [series] = await lookup(monkeypatch, mock)
+    assert [(book.id, book.isbn) for book in series.members if book.series.position != 1] == [
+        ("hardcover:2", "9780441172719"), ("hardcover:12", "9780061120084"),
+    ]
+    assert series.incomplete is False
+
+
+@pytest.mark.asyncio
 async def test_variant_with_higher_expected_count_prevents_false_completeness(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -371,7 +398,7 @@ async def test_slug_details_overlap_with_bounded_concurrency(monkeypatch: pytest
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["graphql", "timeout"])
-async def test_later_detail_failure_keeps_three_complete_series(
+async def test_later_detail_failure_keeps_three_series_with_partial_warning(
     monkeypatch: pytest.MonkeyPatch, failure: str,
 ):
     members = {slug: [row(index, 1)] for index, slug in enumerate(("one", "two", "three", "four"), 1)}
@@ -389,7 +416,7 @@ async def test_later_detail_failure_keeps_three_complete_series(
     assert [item.members[0].id for item in series] == [
         "hardcover:1", "hardcover:2", "hardcover:3",
     ]
-    assert all(not item.incomplete for item in series)
+    assert all(item.incomplete for item in series)
 
 
 @pytest.mark.asyncio
@@ -421,7 +448,38 @@ async def test_graphql_errors_or_bad_detail_preserve_valid_series(monkeypatch: p
             await lookup(monkeypatch, mock)
     else:
         [series] = await lookup(monkeypatch, mock)
+        assert series.incomplete is True
         assert [member.id for member in series.members] == ["hardcover:1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["graphql", "timeout"])
+@pytest.mark.parametrize("fail_page", [1, 2])
+async def test_search_page_failure_preserves_only_prior_valid_groups(
+    monkeypatch: pytest.MonkeyPatch, failure: str, fail_page: int,
+):
+    members = {"first": [row(1, 1)], "second": [row(2, 1)]}
+    base, _ = transport(
+        members, counts={"first": 1, "second": 1},
+        results=["first", "second"] * 5,
+    )
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        if "SearchSeries" in payload["query"] and payload["variables"]["page"] == fail_page:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("search unavailable")
+            return httpx.Response(200, json={"errors": [{"message": "search unavailable"}]})
+        return base.handle_request(request)
+
+    mock = httpx.MockTransport(handle)
+    if fail_page == 1:
+        with pytest.raises(SeriesProviderError):
+            await lookup(monkeypatch, mock)
+    else:
+        series = await lookup(monkeypatch, mock)
+        assert [item.members[0].id for item in series] == ["hardcover:1", "hardcover:2"]
+        assert all(item.incomplete for item in series)
 
 
 @pytest.mark.asyncio
@@ -451,7 +509,7 @@ async def test_failed_paged_variant_does_not_contaminate_complete_variant(
     [series] = await lookup(monkeypatch, mock)
     assert series.id == "43"
     assert [book.id for book in series.members] == ["hardcover:201", "hardcover:202"]
-    assert series.incomplete is False
+    assert series.incomplete is True
 
 
 @pytest.mark.asyncio

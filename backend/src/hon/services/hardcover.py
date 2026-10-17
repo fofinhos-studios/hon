@@ -325,14 +325,18 @@ def _merge_series(variants: list[_SeriesDetails]) -> SeriesResult:
         book.series.position for book in members
         if book.series and _main(book.series.position)
     }
-    optional_isbns = {
-        book.isbn for book in members
-        if book.series and not _main(book.series.position) and book.isbn
-    }
-    optional = {
-        (folded(book.title), folded(book.author), book.language.casefold() if book.language else None)
-        for book in members if book.series and not _main(book.series.position)
-    }
+    optional_isbns: set[str] = set()
+    optional: dict[tuple[str, str, str | None], set[str]] = {}
+    for book in members:
+        if book.series and not _main(book.series.position):
+            identity = (
+                folded(book.title), folded(book.author),
+                book.language.casefold() if book.language else None,
+            )
+            known_isbns = optional.setdefault(identity, set())
+            if book.isbn:
+                known_isbns.add(book.isbn)
+                optional_isbns.add(book.isbn)
     for variant in variants:
         if variant is best:
             continue
@@ -344,20 +348,27 @@ def _merge_series(variants: list[_SeriesDetails]) -> SeriesResult:
                 folded(book.title), folded(book.author),
                 book.language.casefold() if book.language else None,
             )
-            if not _main(position) and (
-                (book.isbn is not None and book.isbn in optional_isbns) or identity in optional
-            ):
-                continue
+            if not _main(position):
+                known_isbns = optional.get(identity)
+                duplicate = (
+                    (book.isbn is not None and book.isbn in optional_isbns)
+                    or (
+                        known_isbns is not None
+                        and (book.isbn is None or not known_isbns or book.isbn in known_isbns)
+                    )
+                )
+                known_isbns = optional.setdefault(identity, set())
+                if book.isbn:
+                    known_isbns.add(book.isbn)
+                    optional_isbns.add(book.isbn)
+                if duplicate:
+                    continue
             members.append(book.model_copy(update={
                 "series": SeriesMembership(id=canonical.id, name=canonical.name, position=position),
             }))
             book_ids.add(book.id)
             if _main(position):
                 positions.add(position)
-            else:
-                optional.add(identity)
-                if book.isbn:
-                    optional_isbns.add(book.isbn)
     members.sort(key=_member_order)
     count = max((variant.count for variant in variants if variant.count is not None), default=None)
     return canonical.model_copy(update={
@@ -376,17 +387,25 @@ async def search_series(query: str) -> list[SeriesResult]:
         failures: list[SeriesProviderError | httpx.HTTPError] = []
         page = 1
         while len(groups) < RESULT_LIMIT:
-            data = await _graphql(client, SEARCH_QUERY, {"query": query, "page": page})
-            search = _object(data.get("search"))
-            hits = _list(_object(search.get("results")).get("hits"))
-            slugs: list[str] = []
-            for hit in hits:
-                slug = non_empty_string(_object(_object(hit).get("document")).get("slug"))
-                if slug is None:
-                    raise SeriesProviderError("Hardcover returned a series without a slug")
-                if slug not in seen_slugs:
-                    seen_slugs.add(slug)
-                    slugs.append(slug)
+            try:
+                data = await _graphql(client, SEARCH_QUERY, {"query": query, "page": page})
+                search = _object(data.get("search"))
+                hits = _list(_object(search.get("results")).get("hits"))
+                slugs: list[str] = []
+                for hit in hits:
+                    slug = non_empty_string(_object(_object(hit).get("document")).get("slug"))
+                    if slug is None:
+                        raise SeriesProviderError("Hardcover returned a series without a slug")
+                    if slug not in seen_slugs:
+                        seen_slugs.add(slug)
+                        slugs.append(slug)
+            except (SeriesProviderError, httpx.HTTPError) as exc:
+                if not groups:
+                    if isinstance(exc, SeriesProviderError):
+                        raise
+                    raise SeriesProviderError("Hardcover could not search series") from exc
+                failures.append(exc)
+                break
             semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
 
             async def fetch(slug: str, semaphore: asyncio.Semaphore = semaphore) -> _SeriesDetails | None:
@@ -426,7 +445,10 @@ async def search_series(query: str) -> list[SeriesResult]:
             if isinstance(failure, SeriesProviderError):
                 raise failure
             raise SeriesProviderError("Hardcover could not load any series") from failure
-        return [_merge_series(group) for group in groups[:RESULT_LIMIT]]
+        results = [_merge_series(group) for group in groups[:RESULT_LIMIT]]
+        if failures:
+            return [series.model_copy(update={"incomplete": True}) for series in results]
+        return results
 
 
 def _catalog_isbn(value: str | None) -> str | None:
