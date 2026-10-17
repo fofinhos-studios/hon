@@ -71,12 +71,12 @@ async def search(query: str) -> list[BookResult]:
         "q": f"isbn:{isbn_value(query)}" if isbn_value(query) else query,
         "maxResults": SEARCH_LIMIT,
         "printType": "books",
-        "key": api_key,
     }
     async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT_SECONDS) as client:
         response = await client.get(
             GOOGLE_BOOKS_URL,
             params=params,
+            headers={"x-goog-api-key": api_key},
         )
         response.raise_for_status()
         data = decode_json_object(response, "Google Books")

@@ -75,6 +75,8 @@ async def test_search_queries_once():
     assert client.get.call_count == 1
     assert client.get.call_args.kwargs["params"]["q"] == "dune"
     assert "langRestrict" not in client.get.call_args.kwargs["params"]
+    assert "key" not in client.get.call_args.kwargs["params"]
+    assert client.get.call_args.kwargs["headers"]["x-goog-api-key"] == "key"
 
 
 @pytest.mark.asyncio
