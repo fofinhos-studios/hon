@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import patch
 
@@ -93,3 +94,78 @@ async def test_isbn_lookup_does_not_expand_to_other_editions():
     with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
         assert len(await search("9788551012239")) == 1
     assert client.get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_edition_hydration_starts_all_top_matches_concurrently():
+    docs = [
+        {
+            "key": f"/works/OL{index}W",
+            "title": "Dune",
+            "author_name": ["Frank Herbert"],
+            "editions": {"docs": [{"key": f"/books/OL{index}M", "title": "Dune"}]},
+        }
+        for index in range(1, 5)
+    ]
+    started: set[str] = set()
+    all_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def get(url, *, params=None, timeout=None):
+        if url.endswith("/search.json"):
+            assert params is not None
+            return response({"docs": docs} if params["q"] == "dune" else {"docs": []})
+        started.add(url)
+        if len(started) == 4:
+            all_started.set()
+        await release.wait()
+        return response({"number_of_pages": int(url.split("/OL")[1].split("M")[0]) * 100})
+
+    client = async_client()
+    client.get.side_effect = get
+    with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
+        task = asyncio.create_task(search("dune"))
+        try:
+            await asyncio.wait_for(all_started.wait(), timeout=1)
+        finally:
+            release.set()
+        books = await task
+    assert {book.id: book.page_count for book in books} == {
+        f"OL{index}M": index * 100 for index in range(1, 5)
+    }
+
+
+@pytest.mark.asyncio
+async def test_missing_author_lookup_does_not_wait_for_edition_pages():
+    isbn = "9788551012239"
+    edition_started = asyncio.Event()
+    author_started = asyncio.Event()
+    release_edition = asyncio.Event()
+    doc = {
+        "key": "/works/OL1W",
+        "title": "Dune",
+        "editions": {"docs": [{"key": "/books/OL1M", "title": "Dune", "isbn": [isbn]}]},
+    }
+
+    async def get(url, *, params=None, timeout=None):
+        if url.endswith("/search.json"):
+            return response({"docs": [doc]})
+        if url.endswith("/books/OL1M.json"):
+            edition_started.set()
+            await release_edition.wait()
+            return response({"number_of_pages": 250})
+        author_started.set()
+        return response({"isbn": isbn, "authors": ["Frank Herbert"], "page_count": 999})
+
+    client = async_client()
+    client.get.side_effect = get
+    with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
+        task = asyncio.create_task(search(isbn))
+        try:
+            await asyncio.wait_for(edition_started.wait(), timeout=1)
+            await asyncio.wait_for(author_started.wait(), timeout=1)
+        finally:
+            release_edition.set()
+        books = await task
+    assert books[0].author == "Frank Herbert"
+    assert books[0].page_count == 250

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { SearchApiError, searchBooks } from "../../services/api";
+import type { EditionType } from "../../services/api";
 import type { SearchBook, SearchSeries } from "../../types";
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -8,6 +9,9 @@ export type SearchErrorCode = "invalid" | "timeout" | "unavailable" | "unknown";
 
 export function useBookSearch(search = searchBooks) {
   const [query, setQueryState] = useState("");
+  const [editionType, setEditionTypeState] = useState<EditionType | null>(null);
+  const queryRef = useRef("");
+  const editionTypeRef = useRef<EditionType | null>(null);
   const [results, setResults] = useState<SearchBook[]>([]);
   const [series, setSeries] = useState<SearchSeries[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,6 +36,7 @@ export function useBookSearch(search = searchBooks) {
 
   const reset = useCallback(() => {
     cancelCurrentSearch();
+    queryRef.current = "";
     setQueryState("");
     setResults([]);
     setSeries([]);
@@ -44,7 +49,7 @@ export function useBookSearch(search = searchBooks) {
   }, [cancelCurrentSearch]);
 
   const runSearch = useCallback(
-    (value: string) => {
+    (value: string, selectedEditionType: EditionType | null) => {
       cancelCurrentSearch();
       const trimmed = value.trim();
       const requestId = requestIdRef.current;
@@ -72,6 +77,9 @@ export function useBookSearch(search = searchBooks) {
             partial: incomplete,
           } = await search(trimmed, {
             signal: controller.signal,
+            ...(selectedEditionType
+              ? { edition_type: selectedEditionType }
+              : {}),
           });
           if (requestId !== requestIdRef.current) return;
           setResults(books);
@@ -104,11 +112,19 @@ export function useBookSearch(search = searchBooks) {
   );
 
   const setQuery = (value: string) => {
+    queryRef.current = value;
     setQueryState(value);
-    runSearch(value);
+    runSearch(value, editionTypeRef.current);
+  };
+  const setEditionType = (value: EditionType | null) => {
+    if (editionTypeRef.current === value) return;
+    editionTypeRef.current = value;
+    setEditionTypeState(value);
+    runSearch(queryRef.current, value);
   };
   return {
     query,
+    editionType,
     results,
     series,
     loading,
@@ -118,6 +134,7 @@ export function useBookSearch(search = searchBooks) {
     errorCode,
     usingFallback,
     setQuery,
+    setEditionType,
     reset,
   };
 }

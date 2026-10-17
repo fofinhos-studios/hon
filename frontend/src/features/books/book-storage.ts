@@ -1,4 +1,4 @@
-import type { Book, BookVisuals, PageBook } from "../../types";
+import type { Book, BookVisuals, PageBook, SearchBook } from "../../types";
 
 const STORAGE_KEY = "hon.books";
 
@@ -85,6 +85,70 @@ function validVisuals(value: unknown): value is BookVisuals {
   );
 }
 
+function validSearchBook(value: unknown): value is SearchBook {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const edition = value as Record<string, unknown>;
+  if (
+    "available_editions" in edition ||
+    typeof edition.id !== "string" ||
+    !edition.id ||
+    typeof edition.source !== "string" ||
+    !edition.source ||
+    typeof edition.work_key !== "string" ||
+    !edition.work_key ||
+    typeof edition.title !== "string" ||
+    typeof edition.author !== "string" ||
+    (edition.cover_url !== null && typeof edition.cover_url !== "string") ||
+    ![
+      "cover_fallback_url",
+      "isbn",
+      "language",
+      "publisher",
+      "published_date",
+    ].every(
+      (key) =>
+        edition[key] === undefined ||
+        edition[key] === null ||
+        typeof edition[key] === "string",
+    ) ||
+    "visuals" in edition ||
+    "visuals_checked_at" in edition ||
+    "pages_read" in edition ||
+    "minutes_listened" in edition
+  )
+    return false;
+  if (edition.kind === "audiobook")
+    return (
+      (edition.duration_minutes === null ||
+        (typeof edition.duration_minutes === "number" &&
+          Number.isSafeInteger(edition.duration_minutes) &&
+          edition.duration_minutes > 0)) &&
+      Array.isArray(edition.narrators) &&
+      edition.narrators.every((name) => typeof name === "string")
+    );
+  if (edition.kind !== "page") return false;
+  const series = edition.series;
+  return (
+    (edition.page_count === null ||
+      (typeof edition.page_count === "number" &&
+        Number.isSafeInteger(edition.page_count) &&
+        edition.page_count > 0)) &&
+    typeof edition.format === "string" &&
+    ["physical", "digital", "unspecified"].includes(edition.format) &&
+    (series == null ||
+      (typeof series === "object" &&
+        !Array.isArray(series) &&
+        "id" in series &&
+        typeof series.id === "string" &&
+        "name" in series &&
+        typeof series.name === "string" &&
+        "position" in series &&
+        (series.position === null ||
+          (typeof series.position === "number" &&
+            Number.isFinite(series.position)))))
+  );
+}
+
 export function loadBooks(storage: StorageAdapter): Book[] {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -101,10 +165,19 @@ export function loadBooks(storage: StorageAdapter): Book[] {
     const migrated = books.map(migrateLegacyBook);
     return migrated.every(isBook)
       ? migrated.map((book) => {
-          const { visuals, visuals_checked_at, background_hidden, ...rest } =
-            book;
+          const {
+            visuals,
+            visuals_checked_at,
+            background_hidden,
+            available_editions,
+            ...rest
+          } = book;
           return {
             ...rest,
+            ...(Array.isArray(available_editions) &&
+            available_editions.every(validSearchBook)
+              ? { available_editions }
+              : {}),
             ...(validVisuals(visuals) ? { visuals } : {}),
             ...(typeof visuals_checked_at === "number" &&
             Number.isFinite(visuals_checked_at)

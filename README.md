@@ -3,9 +3,9 @@
   <a href="https://hon.fofinhos.studio/">hon</a>
 </h1>
 
-Search for books, audiobooks, and series. Series cards appear before ordinary books, show main books first, and count optional books. Select `Include optional books` to show optional entries and include them in a bulk add. If numbered books with known languages agree, optional books with another known language do not appear. Optional books with no language data remain available in this list. If a book title exactly matches the search, series with another name do not appear.
+Search for books, audiobooks, and series. Select an edition type above the search field to filter book results. Each title appears once and shows its edition count. Select a title to choose an edition. The search shows each series in one row. Books in the series appear as separate book results. If numbered books have one known language, optional books with another known language do not appear in that series. Optional books without language data remain. If a book title exactly matches the search, series with another name do not appear.
 
-Add the main books in order, include optional books, or choose one edition. A bulk add skips books without page counts and lists their titles. A bulk add keeps saved IDs, order, and progress. For an individual edition, enter a missing page count or recording duration when you add it. Confirmed series names and volume numbers appear on book search, library, and schedule cards. Set reading days and daily goals, track progress, and export the schedule as a calendar.
+Select `Include optional books` to include optional entries when you add a series. A bulk add skips books without page counts and lists their titles. A bulk add keeps saved IDs, order, and progress. For an individual edition, enter a missing page count or recording duration when you add it. Saved books keep their available editions. Select `Switch edition` on a library card to change editions. The new edition must have enough pages or minutes for the saved progress. Confirmed series names and volume numbers appear on book search, library, and schedule cards. Set reading days and daily goals, track progress, and export the schedule as a calendar.
 
 Select `Remove all books` and confirm to clear the library, saved progress, and the current schedule.
 

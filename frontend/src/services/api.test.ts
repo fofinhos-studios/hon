@@ -35,6 +35,22 @@ describe("searchBooks", () => {
     );
   });
 
+  test("sends the selected edition filter only when supplied", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      json: async () => ({ books: [], series: [], source: "combined" }),
+    });
+    await searchBooks("Dune", { edition_type: "physical" });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/books/search?q=Dune&edition_type=physical",
+      { signal: undefined },
+    );
+    await searchBooks("Dune");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/books/search?q=Dune", {
+      signal: undefined,
+    });
+  });
+
   test("uses the API error detail when present", async () => {
     mockFetch({ ok: false, json: async () => ({ detail: "Search is busy" }) });
 

@@ -93,6 +93,7 @@ function AppContent() {
               onUpdatePageCount={library.updatePageCount}
               onUpdateDuration={library.updateDuration}
               onUpdateListeningProgress={library.updateListeningProgress}
+              onSwitchEdition={library.switchEdition}
             />
           </section>
           <aside

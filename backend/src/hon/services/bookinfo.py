@@ -1,7 +1,6 @@
 """Brazilian edition metadata and publisher-supplied covers from Bookinfo."""
 
 import asyncio
-from contextlib import suppress
 
 import httpx
 
@@ -12,7 +11,8 @@ from hon.services.normalization import non_empty_string, positive_page_count
 
 BOOKINFO_URL = "https://api.bookinfometadados.com.br/api/v1.2/book"
 LANGUAGES = {"portugues": "pt", "ingles": "en", "espanhol": "es", "frances": "fr", "alemao": "de"}
-
+MAX_FRAGMENTS = 8
+FRAGMENT_BATCH_SIZE = 3
 
 def normalize(item: dict) -> BookResult | None:
     isbn = isbn_value(str(item.get("isbn", "")))
@@ -76,21 +76,38 @@ async def search(query: str) -> list[BookResult]:
                 return books
             term = terms[0] if len(terms) > 1 else terms[0][:4]
             if term != folded(query):
-                with suppress(httpx.HTTPError):
+                try:
                     books.extend(await lookup(term))
+                except httpx.DecodingError:
+                    raise
+                except httpx.HTTPError:
+                    pass
             if not any(relevance(query, book) >= 0.85 for book in books):
-                # Bookinfo's title endpoint is substring-based, so query trigrams
-                # of the two longest words to retrieve nearby spellings.
-                fragments = dict.fromkeys(
-                    term[index : index + 3] for term in terms[:2] if len(term) >= 6 for index in range(len(term) - 2)
-                )
-                if not fragments:
-                    return books
-                results = await asyncio.gather(*(lookup(fragment) for fragment in fragments), return_exceptions=True)
-                for result in results:
-                    if isinstance(result, httpx.HTTPError):
-                        continue
-                    if isinstance(result, BaseException):
-                        raise result
-                    books.extend(result)
+                # A few trigrams from each long word retrieve nearby spellings
+                # without issuing a request for every fragment of a long title.
+                words = [word for word in terms[:2] if len(word) >= 6]
+                if words:
+                    fragments = list(
+                        dict.fromkeys(
+                            word[index : index + 3]
+                            for index in range(max(map(len, words)) - 2)
+                            for word in words
+                            if index < len(word) - 2
+                        )
+                    )[:MAX_FRAGMENTS]
+                    for offset in range(0, len(fragments), FRAGMENT_BATCH_SIZE):
+                        results = await asyncio.gather(
+                            *(lookup(fragment) for fragment in fragments[offset : offset + FRAGMENT_BATCH_SIZE]),
+                            return_exceptions=True,
+                        )
+                        for result in results:
+                            if isinstance(result, httpx.DecodingError):
+                                raise result
+                            if isinstance(result, httpx.HTTPError):
+                                continue
+                            if isinstance(result, BaseException):
+                                raise result
+                            books.extend(result)
+                        if any(relevance(query, book) >= 0.85 for book in books):
+                            break
         return books

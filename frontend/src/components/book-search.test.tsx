@@ -74,7 +74,7 @@ test("adds a selected result and resets search", async () => {
   expect(
     view.container.querySelector(".book-search__result-series"),
   ).toBeNull();
-  fireEvent.click(view.getByRole("button", { name: /Edition.*412 pages/ }));
+  fireEvent.click(view.getByRole("button", { name: /Dune.*412 pages/ }));
 
   const { source: _source, work_key: _workKey, ...selected } = book;
   await waitFor(() =>
@@ -85,6 +85,162 @@ test("adds a selected result and resets search", async () => {
   );
   expect(input.value).toBe("");
   expect(view.queryByText("Dune")).toBeNull();
+});
+
+test("filters editions above the search field without losing the query", async () => {
+  searchBooksMock.mockResolvedValue({
+    books: [],
+    series: [],
+    source: "combined",
+  });
+  const view = render(
+    <BookSearch
+      onAdd={() => {}}
+      onAddBooks={() => {}}
+      searchBooks={searchBooksMock}
+    />,
+  );
+  const filter = view.getByRole("group", { name: "Filter by edition" });
+  for (const label of [
+    "All",
+    "Physical",
+    "Digital",
+    "Unspecified",
+    "Audiobook",
+  ]) {
+    expect(view.getByRole("button", { name: label })).toBeTruthy();
+  }
+  const input = view.getByLabelText("Search books") as HTMLInputElement;
+  expect(
+    filter.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.input(input, { target: { value: "dune" } });
+  fireEvent.click(view.getByRole("button", { name: "Physical" }));
+  await waitFor(() =>
+    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
+      signal: expect.any(AbortSignal),
+      edition_type: "physical",
+    }),
+  );
+  expect(input.value).toBe("dune");
+  fireEvent.click(view.getByRole("button", { name: "All" }));
+  await waitFor(() =>
+    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
+      signal: expect.any(AbortSignal),
+    }),
+  );
+  fireEvent.click(view.getByRole("button", { name: "Clear search" }));
+  expect(input.value).toBe("");
+  expect(searchBooksMock).toHaveBeenCalledTimes(2);
+});
+
+test("saves valid alternative editions when selecting a work", async () => {
+  const physical: SearchBook = {
+    id: "print",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|und",
+    page_count: 412,
+    cover_url: null,
+  };
+  const digital: SearchBook = {
+    ...physical,
+    id: "ebook",
+    format: "digital",
+    page_count: 430,
+  };
+  const missing: SearchBook = {
+    ...physical,
+    id: "unknown",
+    format: "unspecified",
+    page_count: null,
+  };
+  searchBooksMock.mockResolvedValue({
+    books: [physical, digital, missing],
+    series: [],
+    source: "combined",
+  });
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch
+      onAdd={onAdd}
+      onAddBooks={() => {}}
+      searchBooks={searchBooksMock}
+    />,
+  );
+  const input = view.getByLabelText("Search books") as HTMLInputElement;
+  fireEvent.input(input, { target: { value: "dune" } });
+  await waitFor(() => expect(view.getByText("3 editions")).toBeTruthy());
+  fireEvent.click(
+    view.container.querySelector(".book-search__result") as HTMLButtonElement,
+  );
+  expect(input.value).toBe("dune");
+  fireEvent.click(view.getByRole("button", { name: /Physical.*412 pages/ }));
+  await waitFor(() =>
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "google_books:print",
+        available_editions: [physical, digital],
+      }),
+    ),
+  );
+  expect(input.value).toBe("");
+});
+
+test("keeps alternative editions when supplying a selected edition's missing pages", async () => {
+  const physical: SearchBook = {
+    id: "print",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|und",
+    page_count: 412,
+    cover_url: null,
+  };
+  const unknown: SearchBook = {
+    ...physical,
+    id: "unknown",
+    format: "unspecified",
+    page_count: null,
+  };
+  searchBooksMock.mockResolvedValue({
+    books: [physical, unknown],
+    series: [],
+    source: "combined",
+  });
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch
+      onAdd={onAdd}
+      onAddBooks={() => {}}
+      searchBooks={searchBooksMock}
+    />,
+  );
+  const input = view.getByLabelText("Search books") as HTMLInputElement;
+  fireEvent.input(input, { target: { value: "dune" } });
+  await waitFor(() => expect(view.getByText("2 editions")).toBeTruthy());
+  fireEvent.click(
+    view.container.querySelector(".book-search__result") as HTMLButtonElement,
+  );
+  fireEvent.click(
+    view.getByRole("button", { name: /Edition.*Pages not listed/ }),
+  );
+  expect(input.value).toBe("dune");
+  fireEvent.input(view.getByLabelText("Pages"), { target: { value: "450" } });
+  fireEvent.click(view.getByRole("button", { name: "Add edition" }));
+  await waitFor(() =>
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "google_books:unknown",
+        available_editions: [physical, { ...unknown, page_count: 450 }],
+      }),
+    ),
+  );
 });
 
 test.each(["results", "empty", "error"])(
@@ -214,7 +370,7 @@ test("keeps an edition without pages and asks for its count before adding", asyn
     timeout: 1000,
   });
   fireEvent.click(
-    view.getByRole("button", { name: /Edition.*Pages not listed/ }),
+    view.getByRole("button", { name: /Katábasis.*Pages not listed/ }),
   );
   expect(onAdd).not.toHaveBeenCalled();
   fireEvent.input(view.getByLabelText("Pages"), { target: { value: "480" } });
@@ -261,13 +417,13 @@ test("shows ordinary edition membership and retains it after entering missing pa
   fireEvent.input(input, { target: { value: "A Series Novel" } });
   await waitFor(() => expect(view.getByText("A Series Novel")).toBeTruthy());
   const result = view.getByRole("button", {
-    name: /Physical.*Book 1\.5 · The Long Series.*Pages not listed/,
+    name: /A Series Novel.*Book 1\.5 · The Long Series.*Pages not listed/,
   });
   expect(result.querySelector(".book-search__result-series")?.textContent).toBe(
     "Book 1.5 · The Long Series",
   );
   fireEvent.click(result);
-  expect(input.value).toBe("");
+  expect(input.value).toBe("A Series Novel");
   expect(onAdd).not.toHaveBeenCalled();
   const pages = view.getByLabelText("Pages") as HTMLInputElement;
   await waitFor(() => expect(document.activeElement).toBe(pages));
@@ -343,16 +499,14 @@ const seriesMember = (
   series: { id: "42", name: "The Wheel of Time", position },
 });
 
-test("renders ordered series members before ordinary editions and bulk adds selected books once", async () => {
+test("renders one series row and flat book rows, counting visible works only", async () => {
   const series: SearchSeries = {
     id: "42",
     name: "The Wheel of Time",
     author: "Robert Jordan",
     incomplete: true,
     members: [
-      seriesMember("hardcover:4", "Unnumbered tale", null, 40),
       seriesMember("hardcover:2", "Second volume", 2, null),
-      seriesMember("hardcover:3", "Midway tale", 1.5, 70),
       seriesMember("hardcover:1", "First volume", 1, 300),
       seriesMember("hardcover:0", "Prelude", 0, 80),
     ],
@@ -360,91 +514,57 @@ test("renders ordered series members before ordinary editions and bulk adds sele
   searchBooksMock.mockResolvedValue({
     series: [series],
     books: [
-      {
-        ...seriesMember("catalog", "Ordinary result", null, 180),
-        source: "google_books",
-        format: "unspecified",
-        series: null,
-      },
+      seriesMember("hardcover:1", "First volume", 1, 300),
+      seriesMember("hardcover:2", "Second volume", 2, null),
     ],
     source: "combined",
   });
   const onAddBooks = vi.fn((_books: Book[]) => {});
-  const onAdd = vi.fn((_book: Book) => {});
   const view = render(
     <BookSearch
-      onAdd={onAdd}
+      onAdd={() => {}}
       onAddBooks={onAddBooks}
       searchBooks={searchBooksMock}
     />,
   );
   const input = view.getByLabelText("Search books");
   fireEvent.input(input, { target: { value: "The Wheel of Time" } });
-  await waitFor(() => expect(view.getByText("The Wheel of Time")).toBeTruthy());
-  expect(view.getByText("5 books found · 2 main · 3 optional")).toBeTruthy();
-
+  await waitFor(() =>
+    expect(
+      view.getByRole("button", { name: "Add series: The Wheel of Time" }),
+    ).toBeTruthy(),
+  );
+  expect(view.container.querySelectorAll(".book-search__series")).toHaveLength(
+    1,
+  );
+  expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(2);
+  expect(view.getByText("3 results found")).toBeTruthy();
   expect(input.getAttribute("aria-controls")).toBe(
     "book-series-results book-search-results",
   );
-  const titles = [
-    ...view.container.querySelectorAll(".book-search__result-title"),
-  ].map((node) => node.textContent);
-  expect(titles).toEqual(["First volume", "Second volume", "Edition"]);
-  expect(view.queryByText("Prelude")).toBeNull();
-  expect(view.queryByText("Book 0 · The Wheel of Time")).toBeNull();
-  expect(
-    view.getByText("Some books may be missing from this series."),
-  ).toBeTruthy();
-  expect(view.getByText("7 results found")).toBeTruthy();
   fireEvent.click(
     view.getByRole("button", { name: "Add series: The Wheel of Time" }),
   );
-  expect(onAddBooks).toHaveBeenCalledTimes(1);
   expect(onAddBooks.mock.calls[0][0].map((book) => book.id)).toEqual([
     "hardcover:1",
   ]);
-  expect(onAddBooks.mock.calls[0][0][0]).toMatchObject({
-    series: { name: "The Wheel of Time", position: 1 },
-    page_count: 300,
-  });
   expect(view.getByText(/Not added.*Second volume/)).toBeTruthy();
-  expect(view.getByText("First volume")).toBeTruthy();
-  expect(onAdd).not.toHaveBeenCalled();
-
   fireEvent.click(
     view.getByRole("checkbox", {
       name: "Include optional books: The Wheel of Time",
     }),
   );
-  const selectedTitles = [
-    ...view.container.querySelectorAll(".book-search__result-title"),
-  ].map((node) => node.textContent);
-  expect(selectedTitles).toEqual([
-    "First volume",
-    "Second volume",
-    "Prelude",
-    "Midway tale",
-    "Unnumbered tale",
-    "Edition",
-  ]);
-  expect(view.getByText("Book 0 · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("Book 1.5 · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("Unnumbered · The Wheel of Time")).toBeTruthy();
-  expect(view.getByText("40 pages")).toBeTruthy();
+  expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(2);
   fireEvent.click(
     view.getByRole("button", { name: "Add series: The Wheel of Time" }),
   );
-  expect(onAddBooks).toHaveBeenCalledTimes(2);
   expect(onAddBooks.mock.calls[1][0].map((book) => book.id)).toEqual([
     "hardcover:0",
     "hardcover:1",
-    "hardcover:3",
-    "hardcover:4",
   ]);
-  expect(view.getByText(/Not added.*Second volume/)).toBeTruthy();
 });
 
-test("requires opting in before showing or adding a series with only optional books", () => {
+test("requires opting in before adding a series with only optional books", () => {
   const series: SearchSeries = {
     id: "42",
     name: "The Wheel of Time",
@@ -461,7 +581,6 @@ test("requires opting in before showing or adding a series with only optional bo
       <SeriesSearchResults
         series={[series]}
         query="The Wheel of Time"
-        onSelect={() => {}}
         onAddSeries={onAddSeries}
       />
     </LanguageProvider>,
@@ -478,7 +597,7 @@ test("requires opting in before showing or adding a series with only optional bo
       name: "Include optional books: The Wheel of Time",
     }),
   );
-  expect(view.getByText("Prelude")).toBeTruthy();
+  expect(view.queryByText("Prelude")).toBeNull();
   expect(add.disabled).toBe(false);
   fireEvent.click(add);
   expect(onAddSeries.mock.calls[0][0].map((book: Book) => book.id)).toEqual([
@@ -502,7 +621,6 @@ test("labels singular main and optional counts in Portuguese", () => {
     };
     const props = {
       query: "The Wheel of Time",
-      onSelect: () => {},
       onAddSeries: () => {},
     };
     const view = render(
@@ -529,7 +647,7 @@ test("labels singular main and optional counts in Portuguese", () => {
   }
 });
 
-test("keeps a series with no eligible pages visible and prompts on individual add", async () => {
+test("keeps series summary with missing pages and offers flat member's page entry", async () => {
   searchBooksMock.mockResolvedValue({
     series: [
       {
@@ -540,43 +658,33 @@ test("keeps a series with no eligible pages visible and prompts on individual ad
         members: [seriesMember("hardcover:2", "Second volume", 2, null)],
       },
     ],
-    books: [],
+    books: [seriesMember("hardcover:2", "Second volume", 2, null)],
     source: "hardcover",
   });
-  const onAddBooks = vi.fn();
   const onAdd = vi.fn();
   const view = render(
     <BookSearch
       onAdd={onAdd}
-      onAddBooks={onAddBooks}
+      onAddBooks={() => {}}
       searchBooks={searchBooksMock}
     />,
   );
   const input = view.getByLabelText("Search books") as HTMLInputElement;
   fireEvent.input(input, { target: { value: "The Wheel of Time" } });
   await waitFor(() => expect(view.getByText("Second volume")).toBeTruthy());
-  expect(input.getAttribute("aria-controls")).toBe("book-series-results");
-  expect(
-    view.queryByText("No books found. Try a title, author or ISBN."),
-  ).toBeNull();
-  fireEvent.click(
-    view.getByRole("button", { name: "Add series: The Wheel of Time" }),
-  );
-  expect(onAddBooks).not.toHaveBeenCalled();
-  expect(view.getByText(/Not added.*Second volume/)).toBeTruthy();
+  expect(view.getByText("2 results found")).toBeTruthy();
   fireEvent.click(
     view.getByRole("button", {
       name: /Second volume.*Book 2.*Pages not listed/,
     }),
   );
-  expect(input.value).toBe("");
+  expect(input.value).toBe("The Wheel of Time");
   fireEvent.input(view.getByLabelText("Pages"), { target: { value: "700" } });
   fireEvent.click(view.getByRole("button", { name: "Add edition" }));
   await waitFor(() =>
     expect(onAdd).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "hardcover:2",
-        title: "Second volume",
         page_count: 700,
         series: { id: "42", name: "The Wheel of Time", position: 2 },
       }),
@@ -611,7 +719,7 @@ test("resets optional selection and warnings with the search query", async () =>
   );
   const input = view.getByLabelText("Search books");
   fireEvent.input(input, { target: { value: "Wheel of Time" } });
-  await waitFor(() => expect(view.getByText("First volume")).toBeTruthy());
+  await waitFor(() => expect(view.getByText("The Wheel of Time")).toBeTruthy());
   const checkbox = view.getByRole("checkbox", {
     name: "Include optional books: The Wheel of Time",
   }) as HTMLInputElement;
@@ -625,8 +733,8 @@ test("resets optional selection and warnings with the search query", async () =>
   expect(view.getByText(/Not added.*First volume/)).toBeTruthy();
 
   fireEvent.input(input, { target: { value: "Wheel of Time books" } });
-  expect(view.queryByText("First volume")).toBeNull();
-  await waitFor(() => expect(view.getByText("First volume")).toBeTruthy());
+  expect(view.queryByText("The Wheel of Time")).toBeNull();
+  await waitFor(() => expect(view.getByText("The Wheel of Time")).toBeTruthy());
   expect(
     (
       view.getByRole("checkbox", {

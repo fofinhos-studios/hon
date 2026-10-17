@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Icon } from "../../components/icon";
 import { useLanguage } from "../../i18n";
-import type { Book } from "../../types";
+import type { Book, SearchBook } from "../../types";
 import { ArtCredit, BookBackdrop, BookCover } from "./book-art";
 import { pagesFromPercent, parseProgressInput } from "./book-progress";
 import { bookVisualStyle } from "./book-visuals";
+import { EditionPicker } from "./edition-picker";
 import { goodreadsBookUrl } from "./goodreads-link";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   onRemove: () => void;
   onUpdateProgress: (pagesRead: number | undefined) => void;
   onUpdatePageCount: (pages: number) => void;
+  onSwitchEdition: (edition: SearchBook) => boolean;
 }
 
 export function BookCard({
@@ -21,6 +23,7 @@ export function BookCard({
   onRemove,
   onUpdateProgress,
   onUpdatePageCount,
+  onSwitchEdition,
 }: Props) {
   const { copy, number, author } = useLanguage();
   const maximum =
@@ -29,10 +32,14 @@ export function BookCard({
     book.kind === "page" ? book.pages_read : book.minutes_listened;
   const progress = Math.round(((completed ?? 0) / maximum) * 100);
   const [editing, setEditing] = useState(false);
+  const [choosingEdition, setChoosingEdition] = useState(false);
+  const [editionError, setEditionError] = useState<string | null>(null);
   const [pages, setPages] = useState(String(maximum));
   const pageInput = useRef<HTMLInputElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const restoreEditFocus = useRef(false);
+  const switchButton = useRef<HTMLButtonElement>(null);
+  const restoreSwitchFocus = useRef(false);
   const minimum = Math.max(1, completed ?? 0);
   const total = Number(pages);
   const valid = Number.isSafeInteger(total) && total >= minimum;
@@ -48,6 +55,38 @@ export function BookCard({
       restoreEditFocus.current = false;
     }
   }, [editing]);
+  useEffect(() => {
+    if (!choosingEdition && restoreSwitchFocus.current) {
+      switchButton.current?.focus();
+      restoreSwitchFocus.current = false;
+    }
+  }, [choosingEdition]);
+  const closePicker = () => {
+    restoreSwitchFocus.current = true;
+    setChoosingEdition(false);
+    setEditionError(null);
+  };
+  const chooseEdition = (edition: SearchBook) => {
+    if (edition.kind !== book.kind) {
+      setEditionError(copy.books.switchEditionKindError);
+      return;
+    }
+    const total =
+      edition.kind === "page" ? edition.page_count : edition.duration_minutes;
+    const completed =
+      book.kind === "page"
+        ? (book.pages_read ?? 0)
+        : (book.minutes_listened ?? 0);
+    if (total !== null && total < completed) {
+      setEditionError(copy.books.switchEditionProgressError);
+      return;
+    }
+    if (onSwitchEdition(edition)) {
+      closePicker();
+    } else {
+      setEditionError(copy.books.switchEditionError);
+    }
+  };
   const closeEditor = () => {
     restoreEditFocus.current = true;
     setEditing(false);
@@ -193,6 +232,20 @@ export function BookCard({
                 </button>
               )}
             </div>
+            {book.available_editions && book.available_editions.length > 1 && (
+              <button
+                type="button"
+                class="hon-btn book-plate__switch-edition"
+                ref={switchButton}
+                aria-label={copy.books.switchEdition(book.title)}
+                onClick={() => {
+                  setEditionError(null);
+                  setChoosingEdition(true);
+                }}
+              >
+                {copy.books.switchEdition(book.title)}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -274,6 +327,15 @@ export function BookCard({
         </div>
       </div>
       <ArtCredit book={book} />
+      {choosingEdition && book.available_editions && (
+        <EditionPicker
+          title={book.title}
+          editions={book.available_editions}
+          onSelect={chooseEdition}
+          onClose={closePicker}
+          error={editionError ?? undefined}
+        />
+      )}
     </li>
   );
 }

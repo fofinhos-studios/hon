@@ -205,11 +205,14 @@ export interface SearchResult {
   partial?: boolean;
 }
 
+export type EditionType = "physical" | "digital" | "unspecified" | "audiobook";
+
 export async function searchBooks(
   query: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; edition_type?: EditionType } = {},
 ): Promise<SearchResult> {
   const params = new URLSearchParams({ q: query });
+  if (options.edition_type) params.set("edition_type", options.edition_type);
   const response = await fetch(`${API_BASE}/books/search?${params}`, {
     signal: options.signal,
   });
