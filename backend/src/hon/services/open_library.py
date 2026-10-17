@@ -96,43 +96,45 @@ async def search(query: str) -> list[BookResult]:
                 async with asyncio.timeout(max(0.01, deadline - monotonic())):
                     books.extend(await candidates(fuzzy))
         books = rank_books(query, books)
-        # Edition page counts aren't indexed by search. Hydrate only the best matches,
-        # with two concurrent requests; absence remains explicit instead of using a work median.
-        semaphore = asyncio.Semaphore(2)
+        # Search omits edition page counts. Fetch only the best edition matches,
+        # concurrently; never substitute a work's page-count median.
+        targets = [
+            book for book in books[:4] if book.page_count is None and re.fullmatch(r"OL\d+M", book.id)
+        ]
 
-        async def hydrate(book: BookResult) -> None:
-            if book.page_count is not None or not re.fullmatch(r"OL\d+M", book.id):
-                return
-            async with semaphore:
-                try:
-                    response = await client.get(f"https://openlibrary.org/books/{book.id}.json", timeout=2.0)
-                    response.raise_for_status()
-                    data = decode_json_object(response, "OpenLibrary edition")
-                    book.page_count = positive_page_count(data.get("number_of_pages"))
-                    physical_format = str(data.get("physical_format") or "").casefold()
-                    if any(
-                        word in physical_format for word in ("hardcover", "paperback", "hardback", "paper", "cloth")
-                    ):
-                        book.format = "physical"
-                    elif any(word in physical_format for word in ("ebook", "e-book", "digital", "epub")):
-                        book.format = "digital"
-                except httpx.HTTPError:
-                    pass
-                if book.author == "Unknown" and book.isbn:
-                    try:
-                        response = await client.get(
-                            f"https://brasilapi.com.br/api/isbn/v1/{book.isbn}",
-                            timeout=2.0,
-                        )
-                        response.raise_for_status()
-                        data = decode_json_object(response, "BrasilAPI ISBN")
-                        if isbn_value(str(data.get("isbn", ""))) == book.isbn:
-                            book.author = first_author(data.get("authors"))
-                            book.page_count = book.page_count or positive_page_count(data.get("page_count"))
-                    except httpx.HTTPError:
-                        pass
+        async def hydrate_edition(book: BookResult) -> None:
+            try:
+                response = await client.get(f"https://openlibrary.org/books/{book.id}.json", timeout=2.0)
+                response.raise_for_status()
+                data = decode_json_object(response, "OpenLibrary edition")
+                pages = positive_page_count(data.get("number_of_pages"))
+                if pages is not None:
+                    book.page_count = pages
+                physical_format = str(data.get("physical_format") or "").casefold()
+                if any(
+                    word in physical_format for word in ("hardcover", "paperback", "hardback", "paper", "cloth")
+                ):
+                    book.format = "physical"
+                elif any(word in physical_format for word in ("ebook", "e-book", "digital", "epub")):
+                    book.format = "digital"
+            except httpx.HTTPError:
+                pass
+
+        async def hydrate_author(book: BookResult) -> None:
+            try:
+                response = await client.get(f"https://brasilapi.com.br/api/isbn/v1/{book.isbn}", timeout=2.0)
+                response.raise_for_status()
+                data = decode_json_object(response, "BrasilAPI ISBN")
+                if isbn_value(str(data.get("isbn", ""))) == book.isbn:
+                    book.author = first_author(data.get("authors"))
+                    book.page_count = book.page_count or positive_page_count(data.get("page_count"))
+            except httpx.HTTPError:
+                pass
 
         with suppress(TimeoutError):
             async with asyncio.timeout(max(0.01, deadline - monotonic())):
-                await asyncio.gather(*(hydrate(book) for book in books[:4]))
+                await asyncio.gather(
+                    *(hydrate_edition(book) for book in targets),
+                    *(hydrate_author(book) for book in targets if book.author == "Unknown" and book.isbn),
+                )
         return books

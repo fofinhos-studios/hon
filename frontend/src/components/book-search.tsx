@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import {
   BookSearchResults,
   SeriesSearchResults,
+  groupSearchResults,
 } from "../features/books/book-search-results";
 import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
@@ -32,6 +33,7 @@ export function BookSearch({
   const [manualPages, setManualPages] = useState("");
   const [manualKind, setManualKind] = useState<"page" | "audiobook">("page");
   const [pendingBook, setPendingBook] = useState<SearchBook | null>(null);
+  const [pendingEditions, setPendingEditions] = useState<SearchBook[]>([]);
   const [editionPages, setEditionPages] = useState("");
   const editionInput = useRef<HTMLInputElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -65,28 +67,45 @@ export function BookSearch({
         return null;
       return { ...edition, id, page_count: edition.page_count };
     }
-    if (!edition.duration_minutes) return null;
-    return { ...edition, id, duration_minutes: edition.duration_minutes };
+    const durationMinutes = edition.duration_minutes;
+    if (
+      durationMinutes === null ||
+      !Number.isSafeInteger(durationMinutes) ||
+      durationMinutes < 1
+    )
+      return null;
+    return { ...edition, id, duration_minutes: durationMinutes };
   };
 
-  const handleAdd = async (book: SearchBook) => {
+  const handleAdd = async (book: SearchBook, editions: SearchBook[]) => {
     const quantity =
       book.kind === "page" ? book.page_count : book.duration_minutes;
-    if (!quantity) {
+    if (!quantity || !Number.isSafeInteger(quantity) || quantity < 1) {
       setPendingBook(book);
+      setPendingEditions(editions);
       setEditionPages("");
-      search.reset();
       return;
     }
     const visuals = await getBookVisuals(book).catch(() => undefined);
     const saved = toSavedBook(book);
     if (saved) {
+      const validEditions = editions
+        .map((edition) =>
+          edition.source === book.source && edition.id === book.id
+            ? book
+            : edition,
+        )
+        .filter((edition) => toSavedBook(edition) !== null);
       onAdd({
         ...saved,
+        ...(validEditions.length > 1
+          ? { available_editions: validEditions }
+          : {}),
         ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
       });
     }
     setPendingBook(null);
+    setPendingEditions([]);
     search.reset();
     searchInput.current?.focus();
   };
@@ -137,6 +156,35 @@ export function BookSearch({
         <p class="book-search__subtitle hon-mono" id="book-search-title">
           {copy.search.title}
         </p>
+        <fieldset
+          class="book-search__filters"
+          aria-label={copy.search.filterEdition}
+        >
+          <legend class="book-search__filter-label hon-mono">
+            {copy.search.filterEdition}
+          </legend>
+          <div class="book-search__filter-options">
+            {(
+              [
+                [null, copy.search.allFormats],
+                ["physical", copy.books.physical],
+                ["digital", copy.books.digital],
+                ["unspecified", copy.search.unspecified],
+                ["audiobook", copy.books.audiobook],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value ?? "all"}
+                type="button"
+                class="book-search__filter"
+                aria-pressed={search.editionType === value}
+                onClick={() => search.setEditionType(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
         <div class="book-search__entry-row">
           <div class="book-search__input-wrap">
             <Icon
@@ -276,23 +324,17 @@ export function BookSearch({
         )}
 
         <BookSearchStatus
-          key={search.query}
+          key={`${search.query}:${search.editionType ?? "all"}`}
           loading={search.loading}
           error={search.error}
           errorCode={search.errorCode}
           resultCount={
-            search.results.length +
-            search.series.length +
-            search.series.reduce(
-              (count, item) => count + item.members.length,
-              0,
-            )
+            groupSearchResults(search.results).length + search.series.length
           }
         />
         <SeriesSearchResults
           series={search.series}
           query={search.query}
-          onSelect={handleAdd}
           onAddSeries={handleAddSeries}
         />
         <BookSearchResults results={search.results} onSelect={handleAdd} />
@@ -319,6 +361,7 @@ export function BookSearch({
                 pendingBook.kind === "page"
                   ? { ...pendingBook, page_count: quantity }
                   : { ...pendingBook, duration_minutes: quantity },
+                pendingEditions,
               );
             }}
           >
@@ -350,6 +393,7 @@ export function BookSearch({
               class="hon-btn"
               onClick={() => {
                 setPendingBook(null);
+                setPendingEditions([]);
                 searchInput.current?.focus();
               }}
             >

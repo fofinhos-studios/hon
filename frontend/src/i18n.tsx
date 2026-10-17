@@ -23,6 +23,12 @@ const en = {
     title: "Find a book",
     placeholder: "Title, author or ISBN",
     label: "Search books",
+    filterEdition: "Filter by edition",
+    allFormats: "All",
+    unspecified: "Unspecified",
+    editionCount: (count: number) =>
+      `${count} edition${count === 1 ? "" : "s"}`,
+    chooseEdition: "Choose edition",
     clear: "Clear search",
     addManually: "Add manually",
     manualForm: "Add a book manually",
@@ -78,6 +84,13 @@ const en = {
     seriesPosition: (name: string, position: number | null) =>
       `${position === null ? "Unnumbered" : `Book ${position}`} · ${name}`,
     totalPages: (title: string) => `Total pages for ${title}`,
+    switchEdition: (title: string) => `Switch edition of ${title}`,
+    switchEditionError:
+      "Cannot switch to this edition. Choose another edition.",
+    switchEditionKindError:
+      "Cannot switch format between a book and an audiobook without losing progress.",
+    switchEditionProgressError:
+      "Your progress exceeds this edition's length. Choose another edition.",
     save: "Save",
     cancel: "Cancel",
     editError: (minimum: number) =>
@@ -192,6 +205,12 @@ const pt: Copy = {
     title: "Encontre um livro",
     placeholder: "Título, autor ou ISBN",
     label: "Buscar livros",
+    filterEdition: "Filtrar por edição",
+    allFormats: "Todos",
+    unspecified: "Não especificado",
+    editionCount: (count: number) =>
+      `${count} ediç${count === 1 ? "ão" : "ões"}`,
+    chooseEdition: "Escolha uma edição",
     clear: "Limpar busca",
     addManually: "Adicionar manualmente",
     manualForm: "Adicionar um livro manualmente",
@@ -249,6 +268,13 @@ const pt: Copy = {
     seriesPosition: (name: string, position: number | null) =>
       `${position === null ? "Sem número" : `Livro ${String(position).replace(".", ",")}`} · ${name}`,
     save: "Salvar",
+    switchEdition: (title: string) => `Trocar edição de ${title}`,
+    switchEditionError:
+      "Não é possível trocar para esta edição. Escolha outra edição.",
+    switchEditionKindError:
+      "Não é possível trocar o formato entre livro e audiolivro sem perder seu progresso.",
+    switchEditionProgressError:
+      "Seu progresso excede a extensão desta edição. Escolha outra edição.",
     cancel: "Cancelar",
     editError: (minimum: number) =>
       `Digite um número inteiro de pelo menos ${minimum} páginas${minimum > 1 ? " para manter seu progresso de leitura" : ""}.`,

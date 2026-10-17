@@ -1,7 +1,9 @@
 """Read-only Hardcover series search and ordered membership."""
 
+import asyncio
 import math
 import os
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import httpx
@@ -13,9 +15,12 @@ from hon.services.normalization import non_empty_string, positive_page_count
 
 HARDCOVER_URL = "https://api.hardcover.app/v1/graphql"
 PAGE_SIZE = 100
+SEARCH_PAGE_SIZE = 10
+DETAIL_CONCURRENCY = 5
+RESULT_LIMIT = 3
 SEARCH_QUERY = """
-query SearchSeries($query: String!) {
-  search(query: $query, query_type: "Series", per_page: 5, page: 1) {
+query SearchSeries($query: String!, $page: Int!) {
+  search(query: $query, query_type: "Series", per_page: 10, page: $page) {
     results
   }
 }
@@ -224,7 +229,14 @@ def _member_order(book: BookResult) -> tuple[bool, float, str, str]:
     )
 
 
-async def _series(client: httpx.AsyncClient, slug: str) -> SeriesResult | None:
+@dataclass(frozen=True)
+class _SeriesDetails:
+    result: SeriesResult
+    count: int | None
+    omitted: bool
+
+
+async def _series(client: httpx.AsyncClient, slug: str) -> _SeriesDetails | None:
     offset = 0
     rows: list[Any] = []
     while True:
@@ -282,10 +294,76 @@ async def _series(client: httpx.AsyncClient, slug: str) -> SeriesResult | None:
     if not members:
         return None
     members.sort(key=_member_order)
-    return SeriesResult(
-        id=series_id, name=series_name, author=series_author, members=members,
-        incomplete=not _complete(members, count, omitted),
+    return _SeriesDetails(
+        result=SeriesResult(
+            id=series_id, name=series_name, author=series_author, members=members,
+            incomplete=not _complete(members, count, omitted),
+        ),
+        count=count,
+        omitted=omitted,
     )
+
+
+def _series_rank(details: _SeriesDetails) -> tuple[bool, int, int, int]:
+    series = details.result
+    return (
+        not series.incomplete,
+        sum(bool(book.series and _main(book.series.position)) for book in series.members),
+        len(series.members),
+        sum(book.page_count is not None for book in series.members),
+    )
+
+
+def _merge_series(variants: list[_SeriesDetails]) -> SeriesResult:
+    if len(variants) == 1:
+        return variants[0].result
+    best = max(variants, key=_series_rank)
+    canonical = best.result
+    members = list(canonical.members)
+    book_ids = {book.id for book in members}
+    positions = {
+        book.series.position for book in members
+        if book.series and _main(book.series.position)
+    }
+    optional_isbns = {
+        book.isbn for book in members
+        if book.series and not _main(book.series.position) and book.isbn
+    }
+    optional = {
+        (folded(book.title), folded(book.author), book.language.casefold() if book.language else None)
+        for book in members if book.series and not _main(book.series.position)
+    }
+    for variant in variants:
+        if variant is best:
+            continue
+        for book in variant.result.members:
+            position = book.series.position if book.series else None
+            if book.id in book_ids or (_main(position) and position in positions):
+                continue
+            identity = (
+                folded(book.title), folded(book.author),
+                book.language.casefold() if book.language else None,
+            )
+            if not _main(position) and (
+                (book.isbn is not None and book.isbn in optional_isbns) or identity in optional
+            ):
+                continue
+            members.append(book.model_copy(update={
+                "series": SeriesMembership(id=canonical.id, name=canonical.name, position=position),
+            }))
+            book_ids.add(book.id)
+            if _main(position):
+                positions.add(position)
+            else:
+                optional.add(identity)
+                if book.isbn:
+                    optional_isbns.add(book.isbn)
+    members.sort(key=_member_order)
+    count = max((variant.count for variant in variants if variant.count is not None), default=None)
+    return canonical.model_copy(update={
+        "members": members,
+        "incomplete": not _complete(members, count, best.omitted),
+    })
 
 
 async def search_series(query: str) -> list[SeriesResult]:
@@ -293,24 +371,62 @@ async def search_series(query: str) -> list[SeriesResult]:
     if not token:
         raise SeriesProviderError("Hardcover is not configured")
     async with httpx.AsyncClient(timeout=10.0, headers={"Authorization": f"Bearer {token}"}) as client:
-        data = await _graphql(client, SEARCH_QUERY, {"query": query})
-        search = _object(data.get("search"))
-        hits = _list(_object(search.get("results")).get("hits"))
-        results: list[SeriesResult] = []
+        groups: list[list[_SeriesDetails]] = []
         seen_slugs: set[str] = set()
-        for hit in hits:
-            slug = non_empty_string(_object(_object(hit).get("document")).get("slug"))
-            if slug is None:
-                raise SeriesProviderError("Hardcover returned a series without a slug")
-            if slug in seen_slugs:
-                continue
-            seen_slugs.add(slug)
-            series = await _series(client, slug)
-            if series is not None:
-                results.append(series)
-                if len(results) == 3:
-                    break
-        return results
+        failures: list[SeriesProviderError | httpx.HTTPError] = []
+        page = 1
+        while len(groups) < RESULT_LIMIT:
+            data = await _graphql(client, SEARCH_QUERY, {"query": query, "page": page})
+            search = _object(data.get("search"))
+            hits = _list(_object(search.get("results")).get("hits"))
+            slugs: list[str] = []
+            for hit in hits:
+                slug = non_empty_string(_object(_object(hit).get("document")).get("slug"))
+                if slug is None:
+                    raise SeriesProviderError("Hardcover returned a series without a slug")
+                if slug not in seen_slugs:
+                    seen_slugs.add(slug)
+                    slugs.append(slug)
+            semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
+
+            async def fetch(slug: str, semaphore: asyncio.Semaphore = semaphore) -> _SeriesDetails | None:
+                async with semaphore:
+                    return await _series(client, slug)
+
+            details = await asyncio.gather(*(fetch(slug) for slug in slugs), return_exceptions=True)
+            for detail in details:
+                if isinstance(detail, (SeriesProviderError, httpx.HTTPError)):
+                    failures.append(detail)
+                    continue
+                if isinstance(detail, BaseException):
+                    raise detail
+                if detail is None:
+                    continue
+                identity = (folded(detail.result.name), folded(detail.result.author))
+                matches = [
+                    group for group in groups
+                    if any(
+                        entry.result.id == detail.result.id
+                        or (folded(entry.result.name), folded(entry.result.author)) == identity
+                        for entry in group
+                    )
+                ]
+                if matches:
+                    matches[0].append(detail)
+                    for group in matches[1:]:
+                        matches[0].extend(group)
+                        groups.remove(group)
+                else:
+                    groups.append([detail])
+            if len(hits) < SEARCH_PAGE_SIZE:
+                break
+            page += 1
+        if not groups and failures:
+            failure = failures[0]
+            if isinstance(failure, SeriesProviderError):
+                raise failure
+            raise SeriesProviderError("Hardcover could not load any series") from failure
+        return [_merge_series(group) for group in groups[:RESULT_LIMIT]]
 
 
 def _catalog_isbn(value: str | None) -> str | None:

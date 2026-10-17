@@ -3,7 +3,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from hon.models.book import BookResult
+from hon.models.book import AudiobookResult, BookResult, SeriesMembership
 from hon.services import bookinfo, open_library
 from hon.services.catalog import isbn_value, rank_books, relevance
 from tests.conftest import async_client, response
@@ -73,6 +73,107 @@ def test_merges_only_matching_isbn_and_keeps_better_metadata():
     assert merged.page_count == 208
     assert merged.author == second.author
     assert merged.cover_url == second.cover_url
+
+
+def test_no_isbn_merges_only_same_publication_and_language():
+    first = book(id="google", source="google_books", isbn=None, published_date="2022-01-01", publisher="Publisher")
+    duplicate = first.model_copy(update={"id": "library", "source": "open_library", "cover_url": "https://cover.test/a"})
+    other_year = first.model_copy(update={"id": "new-year", "published_date": "2023-01-01"})
+    other_language = first.model_copy(update={"id": "translation", "language": "en"})
+    undated = first.model_copy(update={"id": "undated", "published_date": None})
+    ranked = rank_books("antes que o cafe esfrie", [first, duplicate, other_year, other_language, undated])
+    assert len(ranked) == 4
+    assert next(item for item in ranked if item.id == "google").cover_url == "https://cover.test/a"
+
+
+def test_no_isbn_missing_date_merges_only_corroborated_publication():
+    dated = book(
+        id="google", source="google_books", isbn=None, published_date="2022-01-01",
+        publisher="Editora Exemplo", format="physical", cover_url=None,
+    )
+    undated = dated.model_copy(update={
+        "id": "library", "source": "open_library", "published_date": None,
+        "cover_url": "https://cover.test/edition",
+    })
+    ranked = rank_books("antes que o cafe esfrie", [undated, dated])
+    assert len(ranked) == 1
+    assert ranked[0].published_date == "2022-01-01"
+    assert ranked[0].cover_url == "https://cover.test/edition"
+
+
+def test_no_isbn_page_count_corroborates_publication_without_publisher_or_date():
+    first = book(id="google", source="google_books", isbn=None, publisher=None, published_date=None)
+    second = first.model_copy(update={"id": "library", "source": "open_library"})
+    assert len(rank_books("antes que o cafe esfrie", [first, second])) == 1
+
+
+def test_no_isbn_publisher_and_format_corroborate_publication_without_pages():
+    first = book(
+        id="google", source="google_books", isbn=None, published_date=None,
+        publisher="Editora Exemplo", format="physical", page_count=None,
+    )
+    second = first.model_copy(update={"id": "library", "source": "open_library"})
+    assert len(rank_books("antes que o cafe esfrie", [first, second])) == 1
+
+
+@pytest.mark.parametrize(
+    "different",
+    [
+        {"page_count": 224},
+        {"format": "digital"},
+        {"publisher": "Another publisher"},
+        {"language": "en"},
+        {"author": "Another author"},
+        {"published_date": "2023-01-01"},
+        {"series": SeriesMembership(id="series", name="Series", position=2)},
+    ],
+)
+def test_no_isbn_different_editions_remain_distinct(different):
+    first = book(
+        id="google", source="google_books", isbn=None, published_date="2022-01-01",
+        publisher="Editora Exemplo", format="physical",
+        series={"id": "series", "name": "Series", "position": 1},
+    )
+    second = first.model_copy(update={"id": "library", "source": "open_library", **different})
+    assert len(rank_books("antes que o cafe esfrie", [first, second])) == 2
+
+
+def test_no_isbn_does_not_merge_without_corroborating_metadata():
+    first = book(id="google", source="google_books", isbn=None, page_count=None, published_date=None)
+    second = first.model_copy(update={"id": "library", "source": "open_library"})
+    assert len(rank_books("antes que o cafe esfrie", [first, second])) == 2
+
+
+def test_undated_no_isbn_stays_separate_when_two_dated_editions_match():
+    first = book(id="2022", source="google_books", isbn=None, published_date="2022", publisher="Editora")
+    second = first.model_copy(update={"id": "2023", "published_date": "2023"})
+    undated = first.model_copy(update={"id": "undated", "source": "open_library", "published_date": None})
+    assert len(rank_books("antes que o cafe esfrie", [undated, first, second])) == 3
+
+
+def test_isbn_match_cannot_override_conflicting_pages_or_series_position():
+    first = book(id="first", series={"id": "series", "name": "Series", "position": 1})
+    other_pages = first.model_copy(update={"id": "pages", "page_count": 224})
+    other_position = first.model_copy(update={
+        "id": "position", "series": SeriesMembership(id="series", name="Series", position=2),
+    })
+    assert len(rank_books("antes que o cafe esfrie", [first, other_pages, other_position])) == 3
+
+
+def test_distinct_recordings_are_not_merged_even_with_same_provider_id():
+    recording = AudiobookResult(
+        id="audio", title="Antes que o café esfrie", author="Toshikazu Kawaguchi",
+        duration_minutes=300, narrators=["Narrator A"],
+    )
+    another = recording.model_copy(update={"narrators": ["Narrator B"]})
+    assert len(rank_books("antes que o cafe esfrie", [recording, another])) == 2
+
+
+def test_empty_metadata_is_excluded_but_known_author_without_pages_is_valid():
+    empty = book(id="empty", author="Unknown", isbn=None, page_count=None, cover_url=None,
+                 cover_fallback_url="https://fallback.test/cover", publisher=None, published_date=None)
+    credited = empty.model_copy(update={"id": "credited", "author": "Toshikazu Kawaguchi"})
+    assert rank_books("antes que o cafe esfrie", [empty, credited]) == [credited]
 
 
 def test_isbn_validation_and_conversion():
@@ -148,7 +249,10 @@ def test_open_library_uses_edition_not_original_work():
 @pytest.mark.asyncio
 async def test_open_library_fuzzy_retry_includes_unrestricted_results():
     client = async_client(
-        {"docs": []}, {"docs": []}, {"docs": [{"key": "/works/OL1W", "title": "Katábasis"}]}, {"docs": []}
+        {"docs": []},
+        {"docs": []},
+        {"docs": [{"key": "/works/OL1W", "title": "Katábasis", "author_name": ["R. F. Kuang"]}]},
+        {"docs": []},
     )
     with patch("hon.services.open_library.httpx.AsyncClient", return_value=client):
         results = await open_library.search("katabasis")
@@ -160,7 +264,7 @@ async def test_open_library_fuzzy_retry_includes_unrestricted_results():
 async def test_missing_edition_pages_survive_hydration_timeout():
     client = async_client()
     client.get.side_effect = [
-        response({"docs": [{"key": "/books/OL123M", "title": "Katábasis"}]}),
+        response({"docs": [{"key": "/books/OL123M", "title": "Katábasis", "author_name": ["R. F. Kuang"]}]}),
         response({"docs": []}),
         httpx.ReadTimeout("timeout"),
     ]

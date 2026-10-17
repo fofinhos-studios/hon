@@ -2,18 +2,36 @@ import { useMemo, useState } from "preact/hooks";
 import { useLanguage } from "../../i18n";
 import type { SearchBook, SearchSeries } from "../../types";
 import { BookCover } from "./book-art";
+import { EditionPicker } from "./edition-picker";
 
 interface Props {
   results: SearchBook[];
-  onSelect: (book: SearchBook) => void;
+  onSelect: (edition: SearchBook, editions: SearchBook[]) => void;
 }
 
 export function groupSearchResults(results: SearchBook[]): SearchBook[][] {
-  const groups = new Map<string, SearchBook[]>();
+  const knownByWork = new Map<string, string | null>();
   for (const book of results) {
+    if (!book.language || book.language === "und") continue;
     const key =
       book.work_key ||
+      `${book.title.toLowerCase()}|${book.author.toLowerCase()}|${book.language.toLowerCase()}`;
+    const base = key.slice(0, key.lastIndexOf("|"));
+    const previous = knownByWork.get(base);
+    if (previous === undefined) knownByWork.set(base, key);
+    else if (previous !== key) knownByWork.set(base, null);
+  }
+
+  const groups = new Map<string, SearchBook[]>();
+  for (const book of results) {
+    const originalKey =
+      book.work_key ||
       `${book.title.toLowerCase()}|${book.author.toLowerCase()}|${book.language ?? "und"}`;
+    const base = originalKey.slice(0, originalKey.lastIndexOf("|"));
+    const key =
+      !book.language || book.language === "und"
+        ? knownByWork.get(base) || originalKey
+        : originalKey;
     const group = groups.get(key) ?? [];
     group.push(book);
     groups.set(key, group);
@@ -23,93 +41,113 @@ export function groupSearchResults(results: SearchBook[]): SearchBook[][] {
 
 export function BookSearchResults({ results, onSelect }: Props) {
   const { copy, languageName, number } = useLanguage();
+  const [selectedWork, setSelectedWork] = useState<string | null>(null);
   if (results.length === 0) return null;
+  const groups = groupSearchResults(results);
+  const selectedEditions = groups.find(
+    (editions) => (editions[0].work_key || editions[0].id) === selectedWork,
+  );
   return (
-    <ul class="book-search__results" id="book-search-results">
-      {groupSearchResults(results).map((editions, groupIndex) => {
-        const work = editions[0];
-        return (
-          <li key={work.work_key || work.id} class="book-search__work">
-            <div class="book-search__work-heading">
-              <strong>{work.title}</strong>
-              <span>{work.author}</span>
-              {work.language && <span>{languageName(work.language)}</span>}
-            </div>
-            <ul class="book-search__editions">
-              {editions.map((book, index) => (
-                <li
-                  key={`${book.source}:${book.id}`}
-                  class="book-search__result-item"
-                >
-                  <button
-                    type="button"
-                    class="book-search__result"
-                    onClick={() => onSelect(book)}
-                  >
-                    <BookCover
-                      book={book}
-                      priority={
-                        groupIndex === 0 && index === 0 ? "high" : undefined
-                      }
-                    />
-                    <span class="book-search__result-info">
-                      <span class="book-search__result-title">
-                        {book.kind === "audiobook"
-                          ? copy.books.audiobook
-                          : book.format === "physical"
-                            ? copy.books.physical
-                            : book.format === "digital"
-                              ? copy.books.digital
-                              : copy.books.unspecified}
-                      </span>
-                      {book.kind === "page" && book.series && (
-                        <span class="hon-eyebrow book-search__result-series">
-                          {copy.books.seriesPosition(
-                            book.series.name,
-                            book.series.position,
-                          )}
-                        </span>
-                      )}
-                      <span class="book-search__result-meta">
-                        {book.kind === "audiobook"
-                          ? book.duration_minutes
-                            ? copy.books.durationCount(
-                                number(book.duration_minutes),
-                              )
-                            : copy.search.durationNotListed
-                          : book.page_count
-                            ? copy.books.pageCount(number(book.page_count))
-                            : copy.search.pagesNotListed}
-                        {book.publisher ? ` · ${book.publisher}` : ""}
-                        {book.published_date ? ` · ${book.published_date}` : ""}
-                      </span>
-                      {book.kind === "audiobook" &&
-                        book.narrators.length > 0 && (
-                          <span class="book-search__result-meta">
-                            {copy.books.narrators(book.narrators.join(", "))}
-                          </span>
-                        )}
-                      {book.isbn && (
-                        <span class="book-search__result-meta hon-mono">
-                          ISBN {book.isbn}
-                        </span>
+    <>
+      <ul class="book-search__results" id="book-search-results">
+        {groups.map((editions, index) => {
+          const work =
+            editions.find(
+              (edition) => edition.language && edition.language !== "und",
+            ) ?? editions[0];
+          const artwork =
+            editions.find(
+              (edition) => edition.cover_url || edition.cover_fallback_url,
+            ) ?? work;
+          return (
+            <li
+              key={editions[0].work_key || editions[0].id}
+              class="book-search__work"
+            >
+              <button
+                type="button"
+                class="book-search__result"
+                onClick={() =>
+                  editions.length === 1
+                    ? onSelect(work, editions)
+                    : setSelectedWork(editions[0].work_key || editions[0].id)
+                }
+              >
+                <BookCover
+                  book={artwork}
+                  priority={index === 0 ? "high" : undefined}
+                />
+                <span class="book-search__result-main book-search__result-info">
+                  <span class="book-search__result-title">{work.title}</span>
+                  <span class="book-search__result-meta">{work.author}</span>
+                  {work.language && (
+                    <span class="book-search__result-meta">
+                      {languageName(work.language)}
+                    </span>
+                  )}
+                  {work.kind === "page" && work.series && (
+                    <span class="hon-eyebrow book-search__result-series">
+                      {copy.books.seriesPosition(
+                        work.series.name,
+                        work.series.position,
                       )}
                     </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </li>
-        );
-      })}
-    </ul>
+                  )}
+                  {editions.length === 1 && (
+                    <span class="book-search__result-meta">
+                      {work.kind === "audiobook"
+                        ? copy.books.audiobook
+                        : work.format === "physical"
+                          ? copy.books.physical
+                          : work.format === "digital"
+                            ? copy.books.digital
+                            : copy.books.unspecified}
+                      {" · "}
+                      {work.kind === "audiobook"
+                        ? work.duration_minutes
+                          ? copy.books.durationCount(
+                              number(work.duration_minutes),
+                            )
+                          : copy.search.durationNotListed
+                        : work.page_count
+                          ? copy.books.pageCount(number(work.page_count))
+                          : copy.search.pagesNotListed}
+                      {work.publisher ? ` · ${work.publisher}` : ""}
+                      {work.isbn ? ` · ISBN ${work.isbn}` : ""}
+                    </span>
+                  )}
+                </span>
+                <span class="book-search__result-actions">
+                  <span class="book-search__edition-count">
+                    {copy.search.editionCount(editions.length)}
+                  </span>
+                  {editions.length > 1 && (
+                    <span>{copy.search.chooseEdition}</span>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {selectedEditions && selectedEditions.length > 1 && (
+        <EditionPicker
+          title={selectedEditions[0].title}
+          editions={selectedEditions}
+          onSelect={(edition) => {
+            onSelect(edition, selectedEditions);
+            setSelectedWork(null);
+          }}
+          onClose={() => setSelectedWork(null)}
+        />
+      )}
+    </>
   );
 }
 
 interface SeriesProps {
   series: SearchSeries[];
   query: string;
-  onSelect: (book: SearchBook) => void;
   onAddSeries: (books: Extract<SearchBook, { kind: "page" }>[]) => void;
 }
 
@@ -132,14 +170,12 @@ function compareSeriesBooks(left: SeriesBook, right: SeriesBook): number {
 
 function SeriesCard({
   series,
-  onSelect,
   onAddSeries,
 }: {
   series: SearchSeries;
-  onSelect: SeriesProps["onSelect"];
   onAddSeries: SeriesProps["onAddSeries"];
 }) {
-  const { copy, number } = useLanguage();
+  const { copy } = useLanguage();
   const [includeOptional, setIncludeOptional] = useState(false);
   const [skipped, setSkipped] = useState<string[]>([]);
   const members = useMemo(
@@ -155,6 +191,9 @@ function SeriesCard({
   for (const book of members) {
     if (isMainBook(book)) mainCount++;
   }
+  const artwork =
+    members.find((book) => book.cover_url || book.cover_fallback_url) ??
+    members[0];
 
   const addSeries = () => {
     const eligible: SeriesBook[] = [];
@@ -184,6 +223,11 @@ function SeriesCard({
   return (
     <li class="book-search__series">
       <div class="book-search__series-heading">
+        {artwork && (
+          <span class="book-search__series-cover">
+            <BookCover book={artwork} />
+          </span>
+        )}
         <div class="book-search__work-heading">
           <strong>{series.name}</strong>
           <span>{series.author}</span>
@@ -227,35 +271,6 @@ function SeriesCard({
             : ""}
         </p>
       </div>
-      <ul class="book-search__editions">
-        {members.map((book) =>
-          includeOptional || isMainBook(book) ? (
-            <li key={book.id} class="book-search__result-item">
-              <button
-                type="button"
-                class="book-search__result"
-                onClick={() => onSelect(book)}
-              >
-                <BookCover book={book} />
-                <span class="book-search__result-info">
-                  <span class="book-search__result-title">{book.title}</span>
-                  <span class="hon-eyebrow book-search__result-series">
-                    {copy.books.seriesPosition(
-                      book.series?.name ?? series.name,
-                      book.series?.position ?? null,
-                    )}
-                  </span>
-                  <span class="book-search__result-meta">
-                    {book.page_count
-                      ? copy.books.pageCount(number(book.page_count))
-                      : copy.search.pagesNotListed}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ) : null,
-        )}
-      </ul>
     </li>
   );
 }
@@ -263,7 +278,6 @@ function SeriesCard({
 export function SeriesSearchResults({
   series,
   query,
-  onSelect,
   onAddSeries,
 }: SeriesProps) {
   if (series.length === 0) return null;
@@ -272,14 +286,15 @@ export function SeriesSearchResults({
       class="book-search__results book-search__series-results"
       id="book-series-results"
     >
-      {series.map((item) => (
-        <SeriesCard
-          key={`${query}:${item.id}`}
-          series={item}
-          onSelect={onSelect}
-          onAddSeries={onAddSeries}
-        />
-      ))}
+      {[...new Map(series.map((item) => [item.id, item])).values()].map(
+        (item) => (
+          <SeriesCard
+            key={`${query}:${item.id}`}
+            series={item}
+            onAddSeries={onAddSeries}
+          />
+        ),
+      )}
     </ul>
   );
 }

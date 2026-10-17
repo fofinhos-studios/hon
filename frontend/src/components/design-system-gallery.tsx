@@ -121,6 +121,21 @@ export function DesignSystemGallery() {
             onUpdatePageCount={(page_count) => setBook({ ...book, page_count })}
             onRemove={() => setBook(sample)}
             onUpdateProgress={(pages_read) => setBook({ ...book, pages_read })}
+            onSwitchEdition={(edition) => {
+              if (
+                edition.kind !== "page" ||
+                !edition.page_count ||
+                edition.page_count < (book.pages_read ?? 0)
+              )
+                return false;
+              setBook({
+                ...book,
+                ...edition,
+                page_count: edition.page_count,
+                pages_read: book.pages_read,
+              });
+              return true;
+            }}
           />
         </ul>
       </section>

@@ -30,6 +30,7 @@ export interface BookBase {
   language?: string | null;
   publisher?: string | null;
   published_date?: string | null;
+  available_editions?: SearchBook[];
   visuals?: BookVisuals;
   visuals_checked_at?: number;
   background_hidden?: boolean;
@@ -58,11 +59,11 @@ interface SearchMetadata {
 }
 
 export type SearchBook =
-  | (Omit<PageBook, "page_count"> &
+  | (Omit<PageBook, "page_count" | "available_editions"> &
       SearchMetadata & {
         page_count: number | null;
       })
-  | (Omit<Audiobook, "duration_minutes"> &
+  | (Omit<Audiobook, "duration_minutes" | "available_editions"> &
       SearchMetadata & {
         duration_minutes: number | null;
       });

@@ -63,21 +63,114 @@ def work_key(book: SearchBook) -> str:
     return "|".join((folded(title), folded(book.author), (book.language or "und").casefold()))
 
 
-def rank_books[T: BookResult | AudiobookResult](query: str, books: list[T]) -> list[T]:
-    unique: dict[tuple[str, str], T] = {}
-    for book in books:
-        if relevance(query, book) < 0.68:
-            continue
-        identity = (
-            book.kind,
-            book.id if isinstance(book, AudiobookResult) else book.isbn or f"{book.source}:{book.id}",
+def usable(book: SearchBook) -> bool:
+    return bool(
+        (book.page_count if isinstance(book, BookResult) else book.duration_minutes)
+        or book.cover_url
+        or book.isbn
+        or book.publisher
+        or book.published_date
+        or (book.author and folded(book.author) != "unknown")
+        or (isinstance(book, AudiobookResult) and book.narrators)
+    )
+
+
+def _same_edition(first: BookResult | AudiobookResult, second: BookResult | AudiobookResult) -> bool:
+    if isinstance(first, AudiobookResult) or isinstance(second, AudiobookResult):
+        if not isinstance(first, AudiobookResult) or not isinstance(second, AudiobookResult):
+            return False
+        return (
+            first.id == second.id
+            and folded(first.title) == folded(second.title)
+            and (not first.author or not second.author or folded(first.author) == folded(second.author))
+            and (not first.language or not second.language or folded(first.language) == folded(second.language))
+            and (not first.isbn or not second.isbn or first.isbn == second.isbn)
+            and (
+                first.duration_minutes is None or second.duration_minutes is None
+                or first.duration_minutes == second.duration_minutes
+            )
+            and (
+                not first.narrators or not second.narrators
+                or [folded(name) for name in first.narrators] == [folded(name) for name in second.narrators]
+            )
         )
-        if identity in unique:
-            existing = unique[identity]
+
+    if first.isbn or second.isbn:
+        if not first.isbn or first.isbn != second.isbn:
+            return False
+    elif (
+        folded(first.title) != folded(second.title)
+        or folded(first.author) != folded(second.author)
+        or folded(first.author) == "unknown"
+        or not first.language
+        or folded(first.language) != folded(second.language or "")
+    ):
+        return False
+
+    if first.page_count is not None and second.page_count is not None and first.page_count != second.page_count:
+        return False
+    if first.format != "unspecified" and second.format != "unspecified" and first.format != second.format:
+        return False
+    if first.language and second.language and folded(first.language) != folded(second.language):
+        return False
+    if (
+        folded(first.author) != "unknown" and folded(second.author) != "unknown"
+        and folded(first.author) != folded(second.author)
+    ):
+        return False
+    if first.series and second.series:
+        if first.series.id != second.series.id:
+            return False
+        if (
+            first.series.position is not None and second.series.position is not None
+            and first.series.position != second.series.position
+        ):
+            return False
+    if first.isbn:
+        return True
+
+    if (
+        first.published_date and second.published_date
+        and folded(first.published_date) != folded(second.published_date)
+    ):
+        return False
+    if first.publisher and second.publisher and folded(first.publisher) != folded(second.publisher):
+        return False
+    if first.source == second.source and first.id == second.id:
+        return True
+    return bool(
+        (first.published_date and second.published_date)
+        or (first.page_count is not None and first.page_count == second.page_count)
+        or (
+            first.publisher and second.publisher and first.format != "unspecified"
+            and first.format == second.format
+        )
+    )
+
+
+def rank_books[T: BookResult | AudiobookResult](
+    query: str, books: list[T], *, include_unrelated: bool = False, limit: int | None = 40
+) -> list[T]:
+    # Resolve dated publications first, so an undated record cannot attach itself
+    # to one of several otherwise indistinguishable dated editions by input order.
+    unique: list[T] = []
+    ordered = sorted(
+        books,
+        key=lambda book: isinstance(book, BookResult) and not book.isbn and not book.published_date,
+    )
+    for book in ordered:
+        if not usable(book) or (not include_unrelated and relevance(query, book) < 0.68):
+            continue
+        matches = [index for index, existing in enumerate(unique) if _same_edition(existing, book)]
+        if len(matches) == 1:
+            index = matches[0]
+            existing = unique[index]
             # Only merge metadata for the same edition, never merely the same title.
             updates = {
                 key: getattr(book, key)
-                for key in ("cover_url", "cover_fallback_url", "publisher", "published_date", "language")
+                for key in (
+                    "cover_url", "cover_fallback_url", "publisher", "published_date", "language", "series", "isbn"
+                )
                 if getattr(existing, key) is None and getattr(book, key) is not None
             }
             if isinstance(existing, BookResult) and isinstance(book, BookResult):
@@ -94,19 +187,21 @@ def rank_books[T: BookResult | AudiobookResult](query: str, books: list[T]) -> l
                 updates["author"] = book.author
             if existing.cover_url and book.cover_url and existing.cover_url != book.cover_url:
                 updates["cover_fallback_url"] = book.cover_url
-            unique[identity] = existing.model_copy(update=updates)
+            unique[index] = existing.model_copy(update=updates)
         else:
-            unique[identity] = book
+            unique.append(book)
 
     def order(book: T) -> tuple:
         brazilian = bool(book.isbn and book.isbn.startswith(("97885", "97865")))
         year = re.search(r"(?:19|20)\d{2}", book.published_date or "")
         return (
             relevance(query, book),
-            brazilian,
-            bool(book.cover_url),
             bool(book.page_count if isinstance(book, BookResult) else book.duration_minutes),
+            bool(book.cover_url),
+            bool(book.publisher or book.published_date or book.isbn or folded(book.author) != "unknown"),
+            brazilian,
             year.group() if year else "",
         )
 
-    return sorted(unique.values(), key=order, reverse=True)[:40]
+    ranked = sorted(unique, key=order, reverse=True)
+    return ranked[:limit] if limit is not None else ranked

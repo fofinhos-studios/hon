@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Book, PageBook } from "../../types";
+import type { Book, PageBook, SearchBook } from "../../types";
 import { loadBooks, saveBooks } from "./book-storage";
 
 const books: PageBook[] = [
@@ -34,6 +34,7 @@ describe("book storage", () => {
     expect(restored.background_hidden).toBe(true);
     expect(restored.visuals).toBeUndefined();
   });
+
   test("round trips book data", () => {
     const storage = new Map<string, string>();
     const adapter = {
@@ -44,6 +45,46 @@ describe("book storage", () => {
     saveBooks(adapter, books);
 
     expect(loadBooks(adapter)).toEqual(books);
+  });
+
+  test("round trips saved editions without nested alternatives", () => {
+    const alternative: SearchBook = {
+      id: "edition-two",
+      title: "Dune (Illustrated)",
+      author: "Frank Herbert",
+      kind: "page",
+      format: "physical",
+      page_count: 500,
+      cover_url: "https://example.com/dune.jpg",
+      source: "open_library",
+      work_key: "dune|frank herbert|en",
+    };
+    const saved: PageBook = {
+      ...books[0],
+      available_editions: [alternative],
+    };
+    let serialized = "";
+    const adapter = {
+      getItem: () => serialized,
+      setItem: (_key: string, value: string) => {
+        serialized = value;
+      },
+    };
+    saveBooks(adapter, [saved]);
+    expect(loadBooks(adapter)).toEqual([saved]);
+    serialized = JSON.stringify([
+      {
+        ...saved,
+        available_editions: [
+          { ...alternative, available_editions: [alternative] },
+        ],
+      },
+    ]);
+    expect(loadBooks(adapter)).toEqual([books[0]]);
+    serialized = JSON.stringify([
+      { ...saved, available_editions: [{ ...alternative, page_count: "500" }] },
+    ]);
+    expect(loadBooks(adapter)).toEqual([books[0]]);
   });
 
   test("preserves valid series membership and rejects malformed positions", () => {

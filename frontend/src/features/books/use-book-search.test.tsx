@@ -8,7 +8,7 @@ import { useBookSearch } from "./use-book-search";
 const searchBooksMock = vi.fn(
   async (
     _query: string,
-    _options?: { signal?: AbortSignal },
+    _options?: { signal?: AbortSignal; edition_type?: string },
   ): Promise<SearchResult> => ({
     books: [],
     series: [],
@@ -38,6 +38,15 @@ function SearchHarness() {
           search.setQuery((event.target as HTMLInputElement).value)
         }
       />
+      <button type="button" onClick={() => search.setEditionType("physical")}>
+        Physical
+      </button>
+      <button type="button" onClick={() => search.setEditionType("digital")}>
+        Digital
+      </button>
+      <button type="button" onClick={() => search.setEditionType(null)}>
+        All
+      </button>
       <button type="button" onClick={search.reset}>
         Reset
       </button>
@@ -45,6 +54,7 @@ function SearchHarness() {
       <span>{search.series.map((item) => item.name).join(",")}</span>
       <span>{search.usingFallback ? "fallback" : "primary"}</span>
       <span>{search.error || "no error"}</span>
+      <span data-testid="filter">{search.editionType ?? "all"}</span>
     </div>
   );
 }
@@ -104,6 +114,82 @@ describe("useBookSearch", () => {
     expect(view.queryByText("Dune")).toBeNull();
     expect(view.queryByText("Series One")).toBeNull();
     expect(view.getByText("primary")).toBeTruthy();
+  });
+
+  test("restarts debounce on filter changes and keeps clear search unfiltered", async () => {
+    const view = render(<SearchHarness />);
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+    fireEvent.click(view.getByRole("button", { name: "Physical" }));
+    fireEvent.click(view.getByRole("button", { name: "Digital" }));
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
+      signal: expect.any(AbortSignal),
+      edition_type: "digital",
+    });
+    fireEvent.click(view.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2), {
+      timeout: 700,
+    });
+    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
+      signal: expect.any(AbortSignal),
+    });
+    fireEvent.click(view.getByRole("button", { name: "Reset" }));
+    expect(view.getByTestId("filter").textContent).toBe("all");
+  });
+
+  test("aborts active filter request and ignores its stale result", async () => {
+    let resolveOldRequest!: (value: SearchResult) => void;
+    const oldRequest = new Promise<SearchResult>((resolve) => {
+      resolveOldRequest = resolve;
+    });
+    let oldSignal: AbortSignal | undefined;
+    searchBooksMock.mockImplementation((_query, options) => {
+      if (options?.edition_type === "physical") {
+        oldSignal = options.signal;
+        return oldRequest;
+      }
+      return Promise.resolve({ books: [], series: [], source: "combined" });
+    });
+    const view = render(<SearchHarness />);
+    fireEvent.click(view.getByRole("button", { name: "Physical" }));
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
+      timeout: 700,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Digital" }));
+    expect(oldSignal?.aborted).toBe(true);
+    resolveOldRequest({
+      books: [
+        {
+          id: "stale",
+          title: "Stale edition",
+          author: "Author",
+          kind: "page",
+          format: "physical",
+          source: "google_books",
+          work_key: "stale",
+          page_count: 100,
+          cover_url: null,
+        },
+      ],
+      series: [],
+      source: "google_books",
+    });
+    expect(view.queryByText("Stale edition")).toBeNull();
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2), {
+      timeout: 700,
+    });
+    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
+      signal: expect.any(AbortSignal),
+      edition_type: "digital",
+    });
+    expect(view.queryByText("Stale edition")).toBeNull();
   });
 
   test("ignores stale failed searches once a newer search succeeds", async () => {
