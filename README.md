@@ -9,6 +9,12 @@ Editions with the same title and author appear on one card, even when their lang
 
 Book search shows only editions with a page count. An edition remains available if another catalog supplies its page count. Audiobooks use duration instead of pages.
 
+After a complete Book search with the All filter, other edition filters use its cached results. Results with books expire after five minutes. Empty results expire after 15 seconds. A partial search does not supply cached filter results. A new filtered search checks Hardcover membership only for matching editions.
+
+Edition and mode changes start a search immediately. Typed queries wait 350 ms before Hon searches the catalogs.
+
+Search cards use catalog covers. Hon adds a selected book before it requests optional artwork for the library. Saved artwork updates in the background.
+
 Select `Include optional books` to include optional entries when you add a series. A bulk add skips books without page counts and lists their titles. A bulk add keeps saved IDs, order, and progress. For an individual edition, enter a missing page count or recording duration when you add it. Saved books keep their available editions. Select `Switch edition` on a library card to change editions. The new edition must have enough pages or minutes for the saved progress. Confirmed series names and volume numbers appear on book search, library, and schedule cards. Set reading days and daily goals, track progress, and export the schedule as a calendar.
 
 Select `Remove all books` and confirm to clear the library, saved progress, and the current schedule.

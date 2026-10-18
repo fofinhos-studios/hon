@@ -372,7 +372,7 @@ def test_search_enforces_total_deadline(client: TestClient, catalogs):
         assert client.get("/books/search?q=dune").status_code == 504
 
 
-def test_edition_filter_validates_and_caches_each_subset(client: TestClient, catalogs):
+def test_edition_filter_validates_and_returns_matching_results(client: TestClient, catalogs):
     page = BOOK.model_copy(update={"source": "google_books", "format": "physical"})
     digital = page.model_copy(update={"id": "digital", "format": "digital", "isbn": "9780441172719"})
     audio = AudiobookResult(id="audio", title="Dune", author="Frank Herbert",
@@ -384,11 +384,79 @@ def test_edition_filter_validates_and_caches_each_subset(client: TestClient, cat
         assert response.status_code == 200
         assert [item["id"] for item in response.json()["books"]] == [expected]
     assert client.get("/books/search", params={"q": "dune", "edition_type": "print"}).status_code == 422
-    assert catalogs[3].await_count == 1
     assert len(client.get("/books/search?q=dune").json()["books"]) == 3
     assert len(client.get("/books/search?q=dune&edition_type=unspecified").json()["books"]) == 0
-    client.get("/books/search?q=dune&edition_type=physical")
-    assert catalogs[0].await_count == 4
+
+
+def test_edition_switch_uses_complete_search_during_provider_outage(client: TestClient, catalogs):
+    physical = BOOK.model_copy(update={
+        "source": "google_books", "format": "physical", "cover_url": "https://example.test/cover.jpg",
+    })
+    digital = BOOK.model_copy(update={"id": "digital", "format": "digital", "isbn": "9780441172719"})
+    audio = AudiobookResult(
+        id="audio", title="Dune", author="Frank Herbert", duration_minutes=330,
+    )
+    catalogs[0].return_value = [physical, digital]
+    catalogs[3].return_value = [audio]
+    initial = client.get("/books/search?q=dune")
+    assert initial.status_code == 200
+    editions = initial.json()["books"]
+    for catalog in catalogs[:4]:
+        catalog.side_effect = httpx.ReadTimeout("catalog unavailable")
+
+    for kind in ("physical", "digital", "audiobook"):
+        response = client.get("/books/search", params={"q": "dune", "edition_type": kind})
+        assert response.status_code == 200
+        assert response.json()["partial"] is False
+        if kind == "audiobook":
+            expected = [book for book in editions if book["kind"] == "audiobook"]
+        else:
+            expected = [book for book in editions if book["kind"] == "page" and book["format"] == kind]
+        assert response.json()["books"] == expected
+
+
+def test_derived_filter_preserves_open_library_fallback_source(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK.model_copy(update={
+        "id": "digital", "source": "google_books", "title": "Digital Dune", "format": "digital",
+    })]
+    catalogs[1].return_value = [BOOK.model_copy(update={
+        "id": "open", "source": "open_library", "format": "physical",
+    })]
+    assert client.get("/books/search?q=dune").json()["source"] == "combined"
+
+    filtered = client.get("/books/search?q=dune&edition_type=physical")
+    assert filtered.status_code == 200
+    assert [book["id"] for book in filtered.json()["books"]] == ["open"]
+    assert filtered.json()["source"] == "open_library"
+
+
+def test_filtered_search_does_not_report_membership_failure_for_other_formats(
+    client: TestClient, catalogs,
+):
+    catalogs[0].return_value = [BOOK.model_copy(update={
+        "source": "google_books", "format": "digital",
+    })]
+    catalogs[5].side_effect = SeriesProviderError("Hardcover unavailable")
+
+    response = client.get("/books/search?q=dune&edition_type=physical")
+    assert response.status_code == 200
+    assert response.json()["books"] == []
+    assert response.json()["partial"] is False
+
+
+def test_partial_full_search_does_not_hide_recovered_audiobooks(client: TestClient, catalogs):
+    catalogs[0].return_value = [BOOK]
+    catalogs[3].side_effect = httpx.ReadTimeout("audio unavailable")
+    assert client.get("/books/search?q=dune").json()["partial"] is True
+
+    catalogs[3].side_effect = None
+    catalogs[3].return_value = [AudiobookResult(
+        id="audio", title="Dune", author="Frank Herbert", duration_minutes=330,
+    )]
+    recovered = client.get("/books/search?q=dune&edition_type=audiobook")
+    assert recovered.status_code == 200
+    assert [book["id"] for book in recovered.json()["books"]] == ["audio"]
+    assert recovered.json()["partial"] is False
 
 
 def test_series_members_remain_only_in_series_response_without_truncation(client: TestClient, catalogs):

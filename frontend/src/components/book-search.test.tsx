@@ -1,6 +1,13 @@
+import { setTimeout as delay } from "node:timers/promises";
 import "../test/setup";
 
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/preact";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SeriesSearchResults } from "../features/books/book-search-results";
 import { LanguageProvider } from "../i18n";
@@ -93,6 +100,100 @@ test("adds a selected result and resets search", async () => {
   );
   expect(input.value).toBe("");
   expect(view.queryByText("Dune")).toBeNull();
+});
+
+test("adds a selected edition without waiting for optional artwork", async () => {
+  const request = vi
+    .spyOn(globalThis, "fetch")
+    .mockReturnValue(Promise.race<Response>([]));
+  searchBooksMock.mockResolvedValue({
+    books: [
+      {
+        id: "dune-slow-artwork",
+        title: "Dune",
+        author: "Frank Herbert",
+        kind: "page",
+        format: "physical",
+        source: "google_books",
+        work_key: "dune|frank herbert|en",
+        page_count: 412,
+        cover_url: null,
+      },
+    ],
+    series: [],
+    source: "google_books",
+  });
+  try {
+    const onAdd = vi.fn((_book: Book) => {});
+    const view = render(
+      <BookSearch
+        onAdd={onAdd}
+        onAddBooks={() => {}}
+        searchBooks={searchBooksMock}
+      />,
+    );
+    fireEvent.input(view.getByLabelText("Search books"), {
+      target: { value: "dune" },
+    });
+    const result = await waitFor(
+      () => view.getByRole("button", { name: /Dune.*412 pages/ }),
+      { timeout: 700 },
+    );
+    fireEvent.click(result);
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "google_books:dune-slow-artwork" }),
+      ),
+    );
+  } finally {
+    request.mockRestore();
+  }
+});
+
+test("does not request artwork for search results before a book is selected", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ dominant_color: null, artwork: null }), {
+      status: 200,
+    }),
+  );
+  searchBooksMock.mockResolvedValue({
+    books: [
+      {
+        id: "foundation-search-result",
+        title: "Foundation",
+        author: "Isaac Asimov",
+        kind: "page",
+        format: "physical",
+        source: "open_library",
+        work_key: "foundation|isaac asimov|en",
+        page_count: 255,
+        cover_url: null,
+      },
+    ],
+    series: [],
+    source: "open_library",
+  });
+  try {
+    const view = render(
+      <BookSearch
+        onAdd={() => {}}
+        onAddBooks={() => {}}
+        searchBooks={searchBooksMock}
+      />,
+    );
+    fireEvent.input(view.getByLabelText("Search books"), {
+      target: { value: "foundation" },
+    });
+    await waitFor(() => expect(view.getByText("Foundation")).toBeTruthy(), {
+      timeout: 700,
+    });
+    await act(async () => {
+      await delay(120);
+    });
+    expect(request).not.toHaveBeenCalled();
+  } finally {
+    request.mockRestore();
+  }
 });
 
 test("filters editions above the search field without losing the query", async () => {

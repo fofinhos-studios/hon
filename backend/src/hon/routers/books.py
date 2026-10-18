@@ -77,8 +77,26 @@ async def search_books(
 ) -> SearchResult:
     query, normalized = _validated_query(q)
     key = ("books", normalized, edition_type)
+    now = monotonic()
+    if edition_type is not None:
+        complete_key = ("books", normalized, None)
+        complete = _cache.get(complete_key)
+        if complete and complete[0] > now and not complete[1].partial:
+            _cache.move_to_end(complete_key)
+            if edition_type == "audiobook":
+                books = [book for book in complete[1].books if isinstance(book, AudiobookResult)]
+            else:
+                books = [
+                    book for book in complete[1].books
+                    if isinstance(book, BookResult) and book.format == edition_type
+                ]
+            source = (
+                "open_library" if books and all(book.source == "open_library" for book in books)
+                else complete[1].source
+            )
+            return complete[1].model_copy(update={"books": books, "source": source})
     cached = _cache.get(key)
-    if cached and cached[0] > monotonic():
+    if cached and cached[0] > now:
         _cache.move_to_end(key)
         return cached[1]
     try:
@@ -166,6 +184,10 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
         book for book in rank_books(query, books, limit=None)
         if isinstance(book, AudiobookResult) or book.page_count is not None
     ]
+    if edition_type == "audiobook":
+        ranked = [book for book in ranked if isinstance(book, AudiobookResult)]
+    elif edition_type is not None:
+        ranked = [book for book in ranked if isinstance(book, BookResult) and book.format == edition_type]
     candidates = [
         book for book in ranked
         if isinstance(book, BookResult) and book.source != "hardcover" and not book.series
@@ -182,10 +204,6 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
             errors.append(exc)
 
     ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in ranked]
-    if edition_type == "audiobook":
-        ranked = [book for book in ranked if isinstance(book, AudiobookResult)]
-    elif edition_type is not None:
-        ranked = [book for book in ranked if isinstance(book, BookResult) and book.format == edition_type]
     if not successes:
         status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
         raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")

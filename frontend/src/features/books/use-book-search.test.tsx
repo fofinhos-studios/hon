@@ -138,29 +138,31 @@ describe("useBookSearch", () => {
     expect(view.getByText("primary")).toBeTruthy();
   });
 
-  test("restarts debounce on filter changes and keeps clear search unfiltered", async () => {
-    const view = render(<SearchHarness />);
-    fireEvent.input(view.getByLabelText("Query"), {
-      target: { value: "dune" },
-    });
-    fireEvent.click(view.getByRole("button", { name: "Physical" }));
-    fireEvent.click(view.getByRole("button", { name: "Digital" }));
-    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
-      timeout: 700,
-    });
-    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
-      signal: expect.any(AbortSignal),
-      edition_type: "digital",
-    });
-    fireEvent.click(view.getByRole("button", { name: "All" }));
-    await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2), {
-      timeout: 700,
-    });
-    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
-      signal: expect.any(AbortSignal),
-    });
-    fireEvent.click(view.getByRole("button", { name: "Reset" }));
-    expect(view.getByTestId("filter").textContent).toBe("all");
+  test("sends edition switches immediately while typed queries remain debounced", async () => {
+    vi.useFakeTimers();
+    try {
+      const view = render(<SearchHarness />);
+      fireEvent.input(view.getByLabelText("Query"), {
+        target: { value: "dune" },
+      });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(searchBooksMock).not.toHaveBeenCalled();
+
+      fireEvent.click(view.getByRole("button", { name: "Physical" }));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(searchBooksMock).toHaveBeenCalledWith("dune", {
+        signal: expect.any(AbortSignal),
+        edition_type: "physical",
+      });
+
+      fireEvent.input(view.getByLabelText("Query"), {
+        target: { value: "dunes" },
+      });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(searchBooksMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("aborts active filter request and ignores its stale result", async () => {
