@@ -151,13 +151,11 @@ test("adds a selected edition without waiting for optional artwork", async () =>
 });
 
 test("does not request artwork for search results before a book is selected", async () => {
-  const request = vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(
-      new Response(JSON.stringify({ dominant_color: null, artwork: null }), {
-        status: 200,
-      }),
-    );
+  const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ dominant_color: null, artwork: null }), {
+      status: 200,
+    }),
+  );
   searchBooksMock.mockResolvedValue({
     books: [
       {
