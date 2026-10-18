@@ -15,4 +15,6 @@ Bookinfo, Google Books, and Open Library supply book data. [AudioSilo Meta](http
 
 Set `HARDCOVER_API_TOKEN` for series search and membership. Set `GOOGLE_BOOKS_API_KEY` for Google Books in the backend environment. If Hardcover is unavailable, series search reports an error. Book search can show a partial results warning when membership lookup fails.
 
+Series search reads up to ten series per Hardcover request. This reduces the use of the [Hardcover API quota](https://docs.hardcover.app/api/getting-started/#rate-limits).
+
 <p align="center">By <a href="https://www.fofinhos.studio/">fofinhos.studios</a></p>

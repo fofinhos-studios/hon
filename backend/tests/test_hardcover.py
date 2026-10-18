@@ -62,19 +62,23 @@ def transport(
         assert "compilation: {_eq: false}" in query
         assert "{position: asc}, {book: {users_count: desc}}, {book_id: asc}" in query
         assert "default_physical_edition" in query and "default_ebook_edition" in query
-        slug = payload["variables"]["slug"]
+        assert "slug: {_in: $slugs}" in query
+        requested = payload["variables"]["slugs"]
         offset = payload["variables"]["offset"]
         if offset == fail_offset or detail_error:
             return httpx.Response(200, json={"errors": [{"message": "detail unavailable"}]})
-        members = series_members[slug][offset : offset + 100]
-        default_id = 42 + list(series_members).index(slug)
-        series_id, name, author = (series_info or {}).get(
-            slug, (default_id, "The Wheel of Time" if slug == "wheel" else slug.title(), "Robert Jordan"),
-        )
-        return httpx.Response(200, json={"data": {"series": [{
-            "id": series_id, "name": name, "author": {"name": author},
-            "primary_books_count": (counts or {}).get(slug), "book_series": members,
-        }]}})
+        series_rows = []
+        for slug in reversed(requested):
+            members = series_members[slug][offset : offset + 100]
+            default_id = 42 + list(series_members).index(slug)
+            series_id, name, author = (series_info or {}).get(
+                slug, (default_id, "The Wheel of Time" if slug == "wheel" else slug.title(), "Robert Jordan"),
+            )
+            series_rows.append({
+                "id": series_id, "slug": slug, "name": name, "author": {"name": author},
+                "primary_books_count": (counts or {}).get(slug), "book_series": members,
+            })
+        return httpx.Response(200, json={"data": {"series": series_rows}})
 
     return httpx.MockTransport(handle), calls
 
@@ -220,7 +224,9 @@ async def test_skips_empty_series_and_returns_first_three_valid_hits(monkeypatch
                              "three": [row(3, 1)], "four": [row(4, 1)]})
     series = await lookup(monkeypatch, mock)
     assert [book.members[0].id for book in series] == ["hardcover:1", "hardcover:2", "hardcover:3"]
-    assert [call["variables"].get("slug") for call in calls] == [None, "empty", "one", "two", "three", "four"]
+    assert [call["variables"].get("slugs") for call in calls] == [
+        None, ["empty", "one", "two", "three", "four"],
+    ]
 
 
 @pytest.mark.asyncio
@@ -256,8 +262,8 @@ async def test_canonical_series_variants_merge_without_losing_members_or_later_h
     ]
     assert series[0].incomplete is False
     assert [call["variables"]["page"] for call in calls if "SearchSeries" in call["query"]] == [1, 2]
-    assert [call["variables"]["slug"] for call in calls if "SeriesBooks" in call["query"]] == [
-        "thin", "alias", "same-name", "other", "third",
+    assert [call["variables"]["slugs"] for call in calls if "SeriesBooks" in call["query"]] == [
+        ["thin", "alias", "same-name"], ["other", "third"],
     ]
 
 
@@ -363,50 +369,17 @@ async def test_equally_complete_variants_prefer_richer_member_metadata(
 
 
 @pytest.mark.asyncio
-async def test_slug_details_overlap_with_bounded_concurrency(monkeypatch: pytest.MonkeyPatch):
-    active = 0
-    peak = 0
-    release = asyncio.Event()
-    slugs = [f"series-{index}" for index in range(7)]
-
-    async def handle(request: httpx.Request) -> httpx.Response:
-        nonlocal active, peak
-        payload = json.loads(request.content)
-        if "SearchSeries" in payload["query"]:
-            return httpx.Response(200, json={"data": {"search": {"results": {
-                "hits": [{"document": {"slug": slug}} for slug in slugs],
-            }}}})
-        active += 1
-        peak = max(peak, active)
-        if peak == 5:
-            release.set()
-        try:
-            await release.wait()
-            index = slugs.index(payload["variables"]["slug"])
-            return httpx.Response(200, json={"data": {"series": [{
-                "id": index + 1, "name": slugs[index], "author": {"name": "Writer"},
-                "primary_books_count": 1, "book_series": [row(index + 1, 1)],
-            }]}})
-        finally:
-            active -= 1
-
-    series = await asyncio.wait_for(lookup(monkeypatch, httpx.MockTransport(handle)), timeout=2)
-    assert peak == 5
-    assert active == 0
-    assert [item.id for item in series] == ["1", "2", "3"]
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["graphql", "timeout"])
 async def test_later_detail_failure_keeps_three_series_with_partial_warning(
     monkeypatch: pytest.MonkeyPatch, failure: str,
 ):
-    members = {slug: [row(index, 1)] for index, slug in enumerate(("one", "two", "three", "four"), 1)}
-    base, _ = transport(members, counts={slug: 1 for slug in members})
+    members = {slug: [row(index, 1)] for index, slug in enumerate(("one", "two", "three"), 1)}
+    members["four"] = [row(index, index - 3) for index in range(4, 105)]
+    base, _ = transport(members, counts={slug: len(books) for slug, books in members.items()})
 
     def handle(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
-        if "SeriesBooks" in payload["query"] and payload["variables"]["slug"] == "four":
+        if "SeriesBooks" in payload["query"] and payload["variables"]["offset"] == 100:
             if failure == "timeout":
                 raise httpx.ReadTimeout("detail unavailable")
             return httpx.Response(200, json={"errors": [{"message": "detail unavailable"}]})
@@ -425,25 +398,24 @@ async def test_graphql_errors_or_bad_detail_preserve_valid_series(monkeypatch: p
     members = {"first": [row(1, 1)], "second": [row(2, 1)]}
     mock, _ = transport(members, search_error=kind == "search", detail_error=kind == "detail")
     if kind in {"member", "envelope", "list"}:
+        base = mock
+
         def handle(request: httpx.Request) -> httpx.Response:
             body = json.loads(request.content)
             if "SearchSeries" in body["query"]:
-                return httpx.Response(200, json={"data": {"search": {"results": {
-                    "hits": [{"document": {"slug": "first"}}, {"document": {"slug": "second"}}],
-                }}}})
-            if body["variables"]["slug"] == "first":
-                return httpx.Response(200, json={"data": {"series": [{"id": 42, "name": "The Wheel of Time",
-                    "author": None, "primary_books_count": 1, "book_series": [row(1, 1)]}]}})
+                return base.handle_request(request)
+            if kind == "envelope":
+                return httpx.Response(200, json={"data": None})
+            data = base.handle_request(request).json()
+            second = next(series for series in data["data"]["series"] if series["slug"] == "second")
             if kind == "member":
-                invalid = [{"position": 1, "book": []}]
-                return httpx.Response(200, json={"data": {"series": [{"id": 42, "name": "The Wheel of Time",
-                    "author": None, "primary_books_count": 1, "book_series": invalid}]}})
-            if kind == "list":
-                return httpx.Response(200, json={"data": {"series": [{"id": 42, "name": "The Wheel of Time",
-                    "author": None, "primary_books_count": 1, "book_series": None}]}})
-            return httpx.Response(200, json={"data": None})
+                second["book_series"] = [{"position": 1, "book": []}]
+            else:
+                second["book_series"] = None
+            return httpx.Response(200, json=data)
+
         mock = httpx.MockTransport(handle)
-    if kind in {"search", "detail"}:
+    if kind in {"search", "detail", "envelope"}:
         with pytest.raises(SeriesProviderError):
             await lookup(monkeypatch, mock)
     else:
@@ -510,6 +482,53 @@ async def test_failed_paged_variant_does_not_contaminate_complete_variant(
     assert series.id == "43"
     assert [book.id for book in series.members] == ["hardcover:201", "hardcover:202"]
     assert series.incomplete is True
+
+
+@pytest.mark.asyncio
+async def test_discworld_search_fits_hardcover_burst_with_paged_variants(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    slugs = [f"discworld-{index}" for index in range(10)]
+    books = [row(index, index) for index in range(1, 102)]
+    calls: list[dict] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        if len(calls) >= 6:
+            return httpx.Response(429, headers={"Retry-After": "1"})
+        calls.append(payload)
+        if "SearchSeries" in payload["query"]:
+            hits = slugs if payload["variables"]["page"] == 1 else []
+            return httpx.Response(200, json={"data": {"search": {"results": {
+                "hits": [{"document": {"slug": slug}} for slug in hits],
+            }}}})
+        variables = payload["variables"]
+        requested = variables.get("slugs")
+        if requested is None:
+            requested = [variables["slug"]]
+        offset = variables["offset"]
+        if offset == 0:
+            await asyncio.sleep(0)
+        return httpx.Response(200, json={"data": {"series": [
+            {
+                "id": slugs.index(slug) + 1, "slug": slug, "name": "Discworld",
+                "author": {"name": "Terry Pratchett"}, "primary_books_count": 101,
+                "book_series": books[offset : offset + 100],
+            }
+            for slug in requested
+        ]}})
+
+    monkeypatch.setenv("HARDCOVER_API_TOKEN", "private-test-token")
+    client_type = httpx.AsyncClient
+    with patch(
+        "hon.services.hardcover.httpx.AsyncClient",
+        side_effect=lambda **options: client_type(transport=httpx.MockTransport(handle), **options),
+    ):
+        [series] = await search_series("Discworld")
+    assert series.name == "Discworld"
+    assert [book.series.position for book in series.members if book.series] == list(range(1, 102))
+    assert series.incomplete is False
+    assert len(calls) <= 6
 
 
 @pytest.mark.asyncio

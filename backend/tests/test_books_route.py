@@ -101,7 +101,7 @@ def test_series_provider_results_are_filtered_without_catalog(
                 "hits": [{"document": {"slug": "starlight"}}],
             }}}})
         return httpx.Response(200, json={"data": {"series": [{
-            "id": 42, "name": series_name, "author": {"name": "Another Writer"},
+            "id": 42, "slug": "starlight", "name": series_name, "author": {"name": "Another Writer"},
             "primary_books_count": 1,
             "book_series": [{"position": 1, "book": {
                 "id": 17, "title": "First Tale", "pages": 250, "contributions": [],
