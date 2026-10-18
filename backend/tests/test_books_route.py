@@ -476,6 +476,54 @@ def test_unusable_catalog_entries_are_not_flat_books(client: TestClient, catalog
     assert response.json()["series"] == []
 
 
+def test_book_search_omits_pageless_editions_after_merging_catalogs(client: TestClient, catalogs):
+    google, library, _, audio, _, _ = catalogs
+    google.return_value = [
+        BOOK.model_copy(update={
+            "id": "discworld", "title": "Discworld", "author": "Terry Pratchett",
+            "page_count": None, "publisher": "Psygnosis",
+        }),
+        BOOK.model_copy(update={
+            "id": "wyrd", "title": "Wyrd Sisters (Discworld Novels)", "author": "Terry Pratchett",
+            "page_count": None, "cover_url": "https://example.test/wyrd.jpg",
+            "publisher": "ISIS Audio Books", "isbn": "9780753123171",
+        }),
+        BOOK.model_copy(update={
+            "id": "guards", "title": "Guards! Guards! (Discworld)", "author": "Terry Pratchett",
+            "page_count": None, "format": "physical", "isbn": "9780061120084",
+            "cover_url": "https://example.test/guards.jpg",
+        }),
+        BOOK.model_copy(update={
+            "id": "mort", "title": "Mort (Discworld)", "author": "Terry Pratchett",
+            "page_count": 240, "format": "physical",
+            "cover_url": "https://example.test/mort.jpg",
+        }),
+    ]
+    library.return_value = [BOOK.model_copy(update={
+        "id": "guards-library", "source": "open_library",
+        "title": "Guards! Guards! (Discworld)", "author": "Terry Pratchett",
+        "page_count": 320, "format": "physical", "isbn": "9780061120084",
+    })]
+    audio.return_value = [AudiobookResult(
+        id="audio:discworld", title="Discworld narrated", author="Terry Pratchett",
+        duration_minutes=540,
+    )]
+
+    response = client.get("/books/search?q=discworld")
+    assert response.status_code == 200
+    books = response.json()["books"]
+    assert {book["title"] for book in books} == {
+        "Mort (Discworld)", "Guards! Guards! (Discworld)", "Discworld narrated",
+    }
+    guards = next(book for book in books if book["title"] == "Guards! Guards! (Discworld)")
+    assert (guards["page_count"], guards["cover_url"]) == (320, "https://example.test/guards.jpg")
+    assert next(book for book in books if book["kind"] == "audiobook")["duration_minutes"] == 540
+    physical = client.get("/books/search?q=discworld&edition_type=physical")
+    assert {book["title"] for book in physical.json()["books"]} == {
+        "Mort (Discworld)", "Guards! Guards! (Discworld)",
+    }
+
+
 def test_enrichment_is_bounded_without_truncating_catalog_results(client: TestClient, catalogs):
     catalogs[0].return_value = [
         BOOK.model_copy(update={"id": str(number), "title": f"Dune Volume {number}"})

@@ -162,7 +162,10 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
             if result:
                 books.extend(result)
                 sources.append(name)
-    ranked: list[BookResult | AudiobookResult] = rank_books(query, books, limit=None)
+    ranked: list[BookResult | AudiobookResult] = [
+        book for book in rank_books(query, books, limit=None)
+        if isinstance(book, AudiobookResult) or book.page_count is not None
+    ]
     candidates = [
         book for book in ranked
         if isinstance(book, BookResult) and book.source != "hardcover" and not book.series
