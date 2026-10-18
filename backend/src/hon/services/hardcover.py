@@ -1,6 +1,5 @@
 """Read-only Hardcover series search and ordered membership."""
 
-import asyncio
 import math
 import os
 from dataclasses import dataclass
@@ -16,7 +15,6 @@ from hon.services.normalization import non_empty_string, positive_page_count
 HARDCOVER_URL = "https://api.hardcover.app/v1/graphql"
 PAGE_SIZE = 100
 SEARCH_PAGE_SIZE = 10
-DETAIL_CONCURRENCY = 5
 RESULT_LIMIT = 3
 SEARCH_QUERY = """
 query SearchSeries($query: String!, $page: Int!) {
@@ -26,8 +24,9 @@ query SearchSeries($query: String!, $page: Int!) {
 }
 """
 SERIES_QUERY = """
-query SeriesBooks($slug: String!, $offset: Int!) {
-  series(where: {slug: {_eq: $slug}, canonical_id: {_is_null: true}}, limit: 1) {
+query SeriesBooks($slugs: [String!]!, $offset: Int!) {
+  series(where: {slug: {_in: $slugs}, canonical_id: {_is_null: true}}, limit: 10) {
+    slug
     id
     name
     author { name }
@@ -236,32 +235,17 @@ class _SeriesDetails:
     omitted: bool
 
 
-async def _series(client: httpx.AsyncClient, slug: str) -> _SeriesDetails | None:
-    offset = 0
-    rows: list[Any] = []
-    while True:
-        data = await _graphql(client, SERIES_QUERY, {"slug": slug, "offset": offset})
-        series_rows = _list(data.get("series"))
-        if not series_rows:
-            if offset:
-                raise SeriesProviderError("Hardcover lost a series during paging")
-            return None
-        series = _object(series_rows[0])
-        series_id = _id(series.get("id"))
-        series_name = non_empty_string(series.get("name"))
-        if series_id is None or series_name is None:
-            raise SeriesProviderError("Hardcover returned an invalid series")
-        author_data = series.get("author")
-        author = non_empty_string(_object(author_data).get("name")) if author_data is not None else None
-        series_author = author or "Unknown"
-        count = series.get("primary_books_count")
-        if count is not None and (not isinstance(count, int) or isinstance(count, bool) or count < 0):
-            raise SeriesProviderError("Hardcover returned an invalid primary book count")
-        page = _list(series.get("book_series"))
-        rows.extend(page)
-        if len(page) < PAGE_SIZE:
-            break
-        offset += PAGE_SIZE
+def _series_details(series: dict[str, Any], rows: list[Any]) -> _SeriesDetails | None:
+    series_id = _id(series.get("id"))
+    series_name = non_empty_string(series.get("name"))
+    if series_id is None or series_name is None:
+        raise SeriesProviderError("Hardcover returned an invalid series")
+    author_data = series.get("author")
+    author = non_empty_string(_object(author_data).get("name")) if author_data is not None else None
+    series_author = author or "Unknown"
+    count = series.get("primary_books_count")
+    if count is not None and (not isinstance(count, int) or isinstance(count, bool) or count < 0):
+        raise SeriesProviderError("Hardcover returned an invalid primary book count")
 
     members: list[BookResult] = []
     main_positions: set[float] = set()
@@ -302,6 +286,67 @@ async def _series(client: httpx.AsyncClient, slug: str) -> _SeriesDetails | None
         count=count,
         omitted=omitted,
     )
+
+async def _load_series(
+    client: httpx.AsyncClient, slugs: list[str],
+) -> tuple[list[_SeriesDetails], list[SeriesProviderError | httpx.HTTPError]]:
+    if not slugs:
+        return [], []
+    collected: dict[str, tuple[dict[str, Any], list[Any]]] = {}
+    pending = set(slugs)
+    failures: list[SeriesProviderError | httpx.HTTPError] = []
+    offset = 0
+    while pending:
+        requested = [slug for slug in slugs if slug in pending]
+        try:
+            data = await _graphql(client, SERIES_QUERY, {"slugs": requested, "offset": offset})
+            pages = _list(data.get("series"))
+        except (SeriesProviderError, httpx.HTTPError) as exc:
+            failures.append(exc)
+            break
+        seen: set[str] = set()
+        for item in pages:
+            slug: str | None = None
+            accepted = False
+            try:
+                series = _object(item)
+                slug = non_empty_string(series.get("slug"))
+                if slug is None or slug not in pending or slug in seen:
+                    raise SeriesProviderError("Hardcover returned an unexpected series")
+                seen.add(slug)
+                accepted = True
+                members = _list(series.get("book_series"))
+                if offset:
+                    if slug not in collected or _id(series.get("id")) != _id(collected[slug][0].get("id")):
+                        raise SeriesProviderError("Hardcover changed a series during paging")
+                    collected[slug][1].extend(members)
+                else:
+                    collected[slug] = (series, members)
+                if len(members) < PAGE_SIZE:
+                    pending.remove(slug)
+            except SeriesProviderError as exc:
+                failures.append(exc)
+                if accepted and slug is not None:
+                    pending.discard(slug)
+                    collected.pop(slug, None)
+        for slug in set(requested) - seen:
+            pending.remove(slug)
+            if offset:
+                failures.append(SeriesProviderError("Hardcover lost a series during paging"))
+                collected.pop(slug, None)
+        offset += PAGE_SIZE
+    details: list[_SeriesDetails] = []
+    for slug in slugs:
+        if slug not in collected or slug in pending:
+            continue
+        series, members = collected[slug]
+        try:
+            detail = _series_details(series, members)
+            if detail is not None:
+                details.append(detail)
+        except SeriesProviderError as exc:
+            failures.append(exc)
+    return details, failures
 
 
 def _series_rank(details: _SeriesDetails) -> tuple[bool, int, int, int]:
@@ -406,21 +451,9 @@ async def search_series(query: str) -> list[SeriesResult]:
                     raise SeriesProviderError("Hardcover could not search series") from exc
                 failures.append(exc)
                 break
-            semaphore = asyncio.Semaphore(DETAIL_CONCURRENCY)
-
-            async def fetch(slug: str, semaphore: asyncio.Semaphore = semaphore) -> _SeriesDetails | None:
-                async with semaphore:
-                    return await _series(client, slug)
-
-            details = await asyncio.gather(*(fetch(slug) for slug in slugs), return_exceptions=True)
+            details, detail_failures = await _load_series(client, slugs)
+            failures.extend(detail_failures)
             for detail in details:
-                if isinstance(detail, (SeriesProviderError, httpx.HTTPError)):
-                    failures.append(detail)
-                    continue
-                if isinstance(detail, BaseException):
-                    raise detail
-                if detail is None:
-                    continue
                 identity = (folded(detail.result.name), folded(detail.result.author))
                 matches = [
                     group for group in groups
