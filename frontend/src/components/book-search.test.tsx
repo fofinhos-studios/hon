@@ -1,7 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 import "../test/setup";
 
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/preact";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SeriesSearchResults } from "../features/books/book-search-results";
 import { LanguageProvider } from "../i18n";
@@ -97,19 +103,23 @@ test("adds a selected result and resets search", async () => {
 });
 
 test("adds a selected edition without waiting for optional artwork", async () => {
-  const request = vi.spyOn(globalThis, "fetch").mockReturnValue(Promise.race<Response>([]));
+  const request = vi
+    .spyOn(globalThis, "fetch")
+    .mockReturnValue(Promise.race<Response>([]));
   searchBooksMock.mockResolvedValue({
-    books: [{
-      id: "dune-slow-artwork",
-      title: "Dune",
-      author: "Frank Herbert",
-      kind: "page",
-      format: "physical",
-      source: "google_books",
-      work_key: "dune|frank herbert|en",
-      page_count: 412,
-      cover_url: null,
-    }],
+    books: [
+      {
+        id: "dune-slow-artwork",
+        title: "Dune",
+        author: "Frank Herbert",
+        kind: "page",
+        format: "physical",
+        source: "google_books",
+        work_key: "dune|frank herbert|en",
+        page_count: 412,
+        cover_url: null,
+      },
+    ],
     series: [],
     source: "google_books",
   });
@@ -141,21 +151,27 @@ test("adds a selected edition without waiting for optional artwork", async () =>
 });
 
 test("does not request artwork for search results before a book is selected", async () => {
-  const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(JSON.stringify({ dominant_color: null, artwork: null }), { status: 200 }),
-  );
+  const request = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      new Response(JSON.stringify({ dominant_color: null, artwork: null }), {
+        status: 200,
+      }),
+    );
   searchBooksMock.mockResolvedValue({
-    books: [{
-      id: "foundation-search-result",
-      title: "Foundation",
-      author: "Isaac Asimov",
-      kind: "page",
-      format: "physical",
-      source: "open_library",
-      work_key: "foundation|isaac asimov|en",
-      page_count: 255,
-      cover_url: null,
-    }],
+    books: [
+      {
+        id: "foundation-search-result",
+        title: "Foundation",
+        author: "Isaac Asimov",
+        kind: "page",
+        format: "physical",
+        source: "open_library",
+        work_key: "foundation|isaac asimov|en",
+        page_count: 255,
+        cover_url: null,
+      },
+    ],
     series: [],
     source: "open_library",
   });
