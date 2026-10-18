@@ -10,8 +10,6 @@ import { useLanguage } from "../i18n";
 import {
   searchBooks as defaultSearchBooks,
   searchSeries as defaultSearchSeries,
-  getBookVisuals,
-  prefetchBookVisuals,
 } from "../services/api";
 import type { Book, SearchBook } from "../types";
 import { Icon } from "./icon";
@@ -47,9 +45,6 @@ export function BookSearch({
   useEffect(() => {
     if (manualOpen) manualInput.current?.focus();
   }, [manualOpen]);
-  useEffect(() => {
-    for (const book of search.results) prefetchBookVisuals(book);
-  }, [search.results]);
   const manualPageCount = Number(manualPages);
   const canAddManual =
     manualTitle.trim().length > 0 &&
@@ -80,7 +75,7 @@ export function BookSearch({
     return { ...edition, id, duration_minutes: durationMinutes };
   };
 
-  const handleAdd = async (book: SearchBook, editions: SearchBook[]) => {
+  const handleAdd = (book: SearchBook, editions: SearchBook[]) => {
     const quantity =
       book.kind === "page" ? book.page_count : book.duration_minutes;
     if (!quantity || !Number.isSafeInteger(quantity) || quantity < 1) {
@@ -89,7 +84,6 @@ export function BookSearch({
       setEditionPages("");
       return;
     }
-    const visuals = await getBookVisuals(book).catch(() => undefined);
     const saved = toSavedBook(book);
     if (saved) {
       const validEditions = editions
@@ -104,7 +98,6 @@ export function BookSearch({
         ...(validEditions.length > 1
           ? { available_editions: validEditions }
           : {}),
-        ...(visuals ? { visuals, visuals_checked_at: Date.now() } : {}),
       });
     }
     setPendingBook(null);

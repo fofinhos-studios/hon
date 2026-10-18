@@ -59,6 +59,7 @@ export function useBookSearch(
       value: string,
       selectedEditionType: EditionType | null,
       selectedMode: SearchMode,
+      delay = SEARCH_DEBOUNCE_MS,
     ) => {
       cancelCurrentSearch();
       const trimmed = value.trim();
@@ -120,7 +121,7 @@ export function useBookSearch(
             controllerRef.current = null;
           if (requestId === requestIdRef.current) setLoading(false);
         }
-      }, SEARCH_DEBOUNCE_MS);
+      }, delay);
     },
     [cancelCurrentSearch, search, searchForSeries],
   );
@@ -135,13 +136,13 @@ export function useBookSearch(
     editionTypeRef.current = value;
     setEditionTypeState(value);
     if (modeRef.current === "books")
-      runSearch(queryRef.current, value, "books");
+      runSearch(queryRef.current, value, "books", 0);
   };
   const setMode = (value: SearchMode) => {
     if (modeRef.current === value) return;
     modeRef.current = value;
     setModeState(value);
-    runSearch(queryRef.current, editionTypeRef.current, value);
+    runSearch(queryRef.current, editionTypeRef.current, value, 0);
   };
   return {
     mode,

@@ -165,12 +165,6 @@ export function getBookVisuals(book: VisualsBook): Promise<BookVisuals> {
   return request;
 }
 
-export function prefetchBookVisuals(book: VisualsBook): void {
-  void getBookVisuals(book).catch(() => {
-    /* Visual enrichment is optional and must not interrupt search. */
-  });
-}
-
 export async function fetchBookVisuals(
   book: Book,
   _signal: AbortSignal,
