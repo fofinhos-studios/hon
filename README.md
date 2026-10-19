@@ -13,6 +13,10 @@ After a complete Book search with the All filter, other edition filters use its 
 
 Edition and mode changes start a search immediately. Typed queries wait 350 ms before Hon searches the catalogs.
 
+Book mode shows up to ten work cards as soon as a catalog returns results. The order and edition count can change until the search ends. Select `Load more` to show ten more cards. If you select an early result, Hon waits for the complete edition list before it adds the book. If a catalog fails, Hon asks for confirmation before it saves the available editions.
+
+`GET /api/books/search` returns JSON by default. Set `Accept: application/x-ndjson` to receive snapshots and a final result in one response. If all catalogs fail, the stream sends an error instead of a final result. If the client closes the connection, Hon stops the active catalog requests.
+
 Search cards use catalog covers. Hon adds a selected book before it requests optional artwork for the library. Saved artwork updates in the background.
 
 Select `Include optional books` to include optional entries when you add a series. A bulk add skips books without page counts and lists their titles. A bulk add keeps saved IDs, order, and progress. For an individual edition, enter a missing page count or recording duration when you add it. Saved books keep their available editions. Select `Switch edition` on a library card to change editions. The new edition must have enough pages or minutes for the saved progress. Confirmed series names and volume numbers appear on book search, library, and schedule cards. Set reading days and daily goals, track progress, and export the schedule as a calendar.

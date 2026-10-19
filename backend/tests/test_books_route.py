@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from hon.main import app
 from hon.models.book import AudiobookResult, BookResult, SeriesMembership, SeriesResult
 from hon.routers.books import _cache
 from hon.services.hardcover import SeriesProviderError, enrich_catalog_books, search_series
@@ -41,6 +42,116 @@ def test_search_combines_catalogs_and_keeps_distinct_editions(client: TestClient
     assert response.json()["source"] == "combined"
     assert len(response.json()["books"]) == 2
     library.assert_awaited_once_with("dune")
+
+
+def test_book_search_stream_previews_ten_distinct_works_before_complete_results(
+    client: TestClient, catalogs,
+):
+    catalogs[2].return_value = [
+        BOOK.model_copy(update={
+            "id": f"bookinfo:{number}", "title": f"Dune {number}",
+            "source": "bookinfo", "language": "pt",
+        })
+        for number in range(12)
+    ]
+    async def later_translation(_query: str):
+        await asyncio.sleep(0.02)
+        return [BOOK.model_copy(update={
+            "id": "open:translation", "title": "Dune 0",
+            "source": "open_library", "language": "en",
+        })]
+
+    catalogs[1].side_effect = later_translation
+
+    response = client.get("/books/search?q=dune", headers={"Accept": "application/x-ndjson"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[0]["type"] == "snapshot"
+    assert len({(book["title"], book["author"]) for book in events[0]["result"]["books"]}) == 10
+    assert events[-1]["type"] == "final"
+    assert len(events[-1]["result"]["books"]) == 13
+    assert {book["language"] for book in events[-1]["result"]["books"] if book["title"] == "Dune 0"} == {
+        "pt", "en",
+    }
+    assert all(book["page_count"] == 412 for book in events[-1]["result"]["books"])
+    assert client.get("/books/search?q=dune").json() == events[-1]["result"]
+    for catalog in catalogs[:4]:
+        catalog.assert_awaited_once()
+
+
+def test_stream_keeps_the_first_payload_small_when_one_work_has_many_editions(
+    client: TestClient, catalogs,
+):
+    catalogs[2].return_value = [
+        BOOK.model_copy(update={"id": str(index), "page_count": 200 + index})
+        for index in range(30)
+    ]
+    response = client.get("/books/search?q=dune", headers={"Accept": "application/x-ndjson"})
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[0]["type"] == "snapshot"
+    assert len(events[0]["result"]["books"]) <= 2
+    assert len(events[-1]["result"]["books"]) == 30
+
+
+@pytest.mark.parametrize("slow_delivery", [False, True])
+@pytest.mark.asyncio
+async def test_book_search_stream_sends_preview_while_open_library_is_still_pending(
+    catalogs, monkeypatch: pytest.MonkeyPatch, slow_delivery: bool,
+):
+    if slow_delivery:
+        monkeypatch.setattr("hon.routers.books.SEARCH_DEADLINE_SECONDS", 0.1)
+    release_library = asyncio.Event()
+    preview_sent = asyncio.Event()
+    chunks: list[bytes] = []
+
+    async def slow_library(_query: str):
+        await release_library.wait()
+        return [BOOK.model_copy(update={"id": "late", "title": "Dune 13"})]
+
+    catalogs[1].side_effect = slow_library
+    catalogs[2].return_value = [
+        BOOK.model_copy(update={"id": str(number), "title": f"Dune {number}"})
+        for number in range(12)
+    ]
+
+    async def receive():
+        await asyncio.Event().wait()
+
+    async def send(message):
+        if message["type"] == "http.response.body" and message.get("body"):
+            chunk = message["body"]
+            chunks.append(chunk)
+            if b'"snapshot"' in chunk:
+                preview_sent.set()
+                if slow_delivery:
+                    await asyncio.sleep(0.25)
+
+    scope = {
+        "type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"},
+        "method": "GET", "scheme": "http", "root_path": "", "path": "/books/search",
+        "raw_path": b"/books/search", "query_string": b"q=dune",
+        "headers": [(b"accept", b"application/x-ndjson")],
+        "client": ("127.0.0.1", 1234), "server": ("test", 80), "http_version": "1.1",
+    }
+    request = asyncio.create_task(app(scope, receive, send))
+    try:
+        await asyncio.wait_for(preview_sent.wait(), timeout=2)
+        assert not release_library.is_set()
+        assert not request.done()
+        release_library.set()
+        await asyncio.wait_for(request, timeout=2)
+    finally:
+        release_library.set()
+        if not request.done():
+            request.cancel()
+            await asyncio.gather(request, return_exceptions=True)
+    events = [json.loads(line) for line in b"".join(chunks).splitlines()]
+    assert events[0]["type"] == "snapshot"
+    assert events[-1]["type"] == "final"
+    assert any(book["title"] == "Dune 13" for book in events[-1]["result"]["books"])
+    for catalog in catalogs[:4]:
+        catalog.assert_awaited_once()
 
 
 def test_search_survives_a_provider_failure(client: TestClient, catalogs):

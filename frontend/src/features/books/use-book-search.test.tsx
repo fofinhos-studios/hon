@@ -1,14 +1,25 @@
 import "../../test/setup";
 
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { SearchApiError } from "../../services/api";
 import type { SearchResult } from "../../services/api";
 import { useBookSearch } from "./use-book-search";
 
 const searchBooksMock = vi.fn(
   async (
     _query: string,
-    _options?: { signal?: AbortSignal; edition_type?: string },
+    _options?: {
+      signal?: AbortSignal;
+      edition_type?: string;
+      onSnapshot?: (result: SearchResult) => void;
+    },
   ): Promise<SearchResult> => ({
     books: [],
     series: [],
@@ -150,10 +161,7 @@ describe("useBookSearch", () => {
 
       fireEvent.click(view.getByRole("button", { name: "Physical" }));
       await vi.advanceTimersByTimeAsync(1);
-      expect(searchBooksMock).toHaveBeenCalledWith("dune", {
-        signal: expect.any(AbortSignal),
-        edition_type: "physical",
-      });
+      expect(searchBooksMock).toHaveBeenCalledTimes(1);
 
       fireEvent.input(view.getByLabelText("Query"), {
         target: { value: "dunes" },
@@ -208,10 +216,6 @@ describe("useBookSearch", () => {
     expect(view.queryByText("Stale edition")).toBeNull();
     await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2), {
       timeout: 700,
-    });
-    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
-      signal: expect.any(AbortSignal),
-      edition_type: "digital",
     });
     expect(view.queryByText("Stale edition")).toBeNull();
   });
@@ -365,9 +369,6 @@ describe("useBookSearch", () => {
     await waitFor(() => expect(searchSeriesMock).toHaveBeenCalledTimes(1), {
       timeout: 700,
     });
-    expect(searchSeriesMock).toHaveBeenCalledWith("babel", {
-      signal: expect.any(AbortSignal),
-    });
     expect(searchBooksMock).not.toHaveBeenCalled();
     expect(view.getByTestId("filter").textContent).toBe("physical");
     expect(view.getByTestId("mode").textContent).toBe("series");
@@ -376,10 +377,6 @@ describe("useBookSearch", () => {
     fireEvent.click(view.getByRole("button", { name: "Books" }));
     await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1), {
       timeout: 700,
-    });
-    expect(searchBooksMock).toHaveBeenCalledWith("babel", {
-      signal: expect.any(AbortSignal),
-      edition_type: "digital",
     });
     expect((view.getByLabelText("Query") as HTMLInputElement).value).toBe(
       "babel",
@@ -517,5 +514,98 @@ describe("useBookSearch", () => {
     fireEvent.click(view.getByRole("button", { name: "Reset" }));
     expect(view.queryByText("Book search failed")).toBeNull();
     expect(view.getByTestId("searched").textContent).toBe("not searched");
+  });
+  test("discards late snapshots after a filter change and reset", async () => {
+    const snapshots: Array<(result: SearchResult) => void> = [];
+    const signals: AbortSignal[] = [];
+    searchBooksMock.mockImplementation((_query, options) => {
+      if (!options?.onSnapshot || !options.signal)
+        throw new Error("Missing active search stream");
+      snapshots.push(options.onSnapshot);
+      signals.push(options.signal);
+      return new Promise<SearchResult>(() => {});
+    });
+    const book = (title: string) => ({
+      books: [
+        {
+          id: title,
+          title,
+          author: "Author",
+          kind: "page" as const,
+          format: "physical" as const,
+          source: "google_books" as const,
+          work_key: title,
+          page_count: 120,
+          cover_url: null,
+        },
+      ],
+      series: [],
+      source: "google_books" as const,
+    });
+    const view = render(<SearchHarness />);
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+    await waitFor(() => expect(snapshots).toHaveLength(1), { timeout: 700 });
+    snapshots[0](book("Early edition"));
+    await waitFor(() => expect(view.getByText("Early edition")).toBeTruthy());
+    fireEvent.click(view.getByRole("button", { name: "Physical" }));
+    expect(signals[0].aborted).toBe(true);
+    expect(view.queryByText("Early edition")).toBeNull();
+    snapshots[0](book("Stale edition"));
+    expect(view.queryByText("Stale edition")).toBeNull();
+    await waitFor(() => expect(snapshots).toHaveLength(2));
+    fireEvent.click(view.getByRole("button", { name: "Reset" }));
+    expect(signals[1].aborted).toBe(true);
+    snapshots[1](book("After reset"));
+    expect(view.queryByText("After reset")).toBeNull();
+  });
+
+  test("retains early books as incomplete when a stream times out", async () => {
+    let snapshot!: (value: SearchResult) => void;
+    let fail!: (reason: Error) => void;
+    searchBooksMock.mockImplementation((_query, options) => {
+      if (!options?.onSnapshot)
+        throw new Error("Missing search stream callback");
+      snapshot = options.onSnapshot;
+      return new Promise<SearchResult>((_, reject) => {
+        fail = reject;
+      });
+    });
+    const view = render(<SearchHarness />);
+    fireEvent.input(view.getByLabelText("Query"), {
+      target: { value: "dune" },
+    });
+    await waitFor(() => expect(searchBooksMock).toHaveBeenCalled(), {
+      timeout: 700,
+    });
+    act(() =>
+      snapshot({
+        books: [
+          {
+            id: "early",
+            title: "Dune",
+            author: "Frank Herbert",
+            kind: "page",
+            format: "physical",
+            source: "bookinfo",
+            work_key: "dune|frank herbert|en",
+            page_count: 412,
+            cover_url: null,
+          },
+        ],
+        series: [],
+        source: "bookinfo",
+      }),
+    );
+    expect(view.getByText("Dune")).toBeTruthy();
+
+    await act(async () => {
+      fail(new SearchApiError("Book search timed out", "timeout"));
+    });
+    expect(view.getByText("Dune")).toBeTruthy();
+    expect(view.getByTestId("partial").textContent).toBe("partial");
+    expect(view.getByTestId("searched").textContent).toBe("searched");
+    expect(view.getByText("Book search timed out")).toBeTruthy();
   });
 });

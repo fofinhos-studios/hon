@@ -1,12 +1,15 @@
 import asyncio
 import logging
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from time import monotonic
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, StreamingResponse
+from starlette.requests import ClientDisconnect
+from starlette.types import Receive, Scope, Send
 
 from hon.models.book import AudiobookResult, BookResult, SearchResult
 from hon.models.visuals import BookVisuals, VisualRequest
@@ -28,6 +31,27 @@ CATALOG_TIMEOUT_SECONDS = 6.0
 SERIES_TIMEOUT_SECONDS = 8.0
 ENRICHMENT_TIMEOUT_SECONDS = 2.0
 _cache: OrderedDict[tuple[str, str, str | None], tuple[float, SearchResult]] = OrderedDict()
+
+
+class _SearchStream(StreamingResponse):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        streaming = asyncio.create_task(self.stream_response(send))
+        disconnected = asyncio.create_task(self.listen_for_disconnect(receive))
+        try:
+            done, _ = await asyncio.wait({streaming, disconnected}, return_when=asyncio.FIRST_COMPLETED)
+            if streaming in done:
+                try:
+                    await streaming
+                except OSError as exc:
+                    raise ClientDisconnect() from exc
+            else:
+                await disconnected
+        finally:
+            streaming.cancel()
+            disconnected.cancel()
+            await asyncio.gather(streaming, disconnected, return_exceptions=True)
+            if isinstance(self.body_iterator, AsyncGenerator):
+                await self.body_iterator.aclose()
 
 
 def _series_title_key(value: str) -> str:
@@ -72,10 +96,48 @@ async def book_cover(
 
 @router.get("/search", response_model=SearchResult)
 async def search_books(
+    request: Request,
     q: str = Query(..., min_length=3, max_length=MAX_QUERY_LENGTH),
     edition_type: str | None = Query(default=None, pattern="^(physical|digital|unspecified|audiobook)$"),
-) -> SearchResult:
+) -> SearchResult | StreamingResponse:
     query, normalized = _validated_query(q)
+    key = ("books", normalized, edition_type)
+    cached = _cached_book_result(normalized, edition_type)
+    streaming = any(
+        media_type.split(";", 1)[0].strip().lower() == "application/x-ndjson"
+        for media_type in request.headers.get("accept", "").split(",")
+    )
+    if streaming:
+        async def stream() -> AsyncIterator[str]:
+            if cached is not None:
+                yield _search_event("final", cached)
+                return
+            try:
+                async with aclosing(_search_catalog_events(query, edition_type)) as events:
+                    async for kind, result in events:
+                        if kind == "final":
+                            _cache_result(key, result)
+                        yield _search_event(kind, result)
+            except TimeoutError:
+                yield '{"type":"error","code":"timeout","message":"Book search timed out"}\n'
+            except HTTPException as exc:
+                code = "timeout" if exc.status_code == 504 else "unavailable"
+                yield f'{{"type":"error","code":"{code}","message":"Book search unavailable. Try again."}}\n'
+
+        return _SearchStream(stream(), media_type="application/x-ndjson")
+    if cached is not None:
+        return cached
+    try:
+        async for kind, result in _search_catalog_events(query, edition_type, preview=False):
+            if kind == "final":
+                _cache_result(key, result)
+                return result
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Book search timed out") from exc
+    raise RuntimeError("Book search ended without a result")
+
+
+def _cached_book_result(normalized: str, edition_type: str | None) -> SearchResult | None:
     key = ("books", normalized, edition_type)
     now = monotonic()
     if edition_type is not None:
@@ -99,13 +161,11 @@ async def search_books(
     if cached and cached[0] > now:
         _cache.move_to_end(key)
         return cached[1]
-    try:
-        async with asyncio.timeout(SEARCH_DEADLINE_SECONDS):
-            result = await _search_catalogs(query, edition_type)
-    except TimeoutError as exc:
-        raise HTTPException(status_code=504, detail="Book search timed out") from exc
-    _cache_result(key, result)
-    return result
+    return None
+
+
+def _search_event(kind: str, result: SearchResult) -> str:
+    return '{"type":"' + kind + '","result":' + result.model_dump_json() + '}\n'
 
 
 @series_router.get("/search", response_model=SearchResult)
@@ -145,7 +205,41 @@ def _cache_result(key: tuple[str, str, str | None], result: SearchResult) -> Non
         _cache.popitem(last=False)
 
 
-async def _search_catalogs(query: str, edition_type: str | None = None) -> SearchResult:
+def _ranked_catalog_books(
+    query: str, books: list[BookResult | AudiobookResult], edition_type: str | None
+) -> list[BookResult | AudiobookResult]:
+    ranked: list[BookResult | AudiobookResult] = [
+        book for book in rank_books(query, books, limit=None)
+        if isinstance(book, AudiobookResult) or book.page_count is not None
+    ]
+    if edition_type == "audiobook":
+        return [book for book in ranked if isinstance(book, AudiobookResult)]
+    if edition_type is not None:
+        return [book for book in ranked if isinstance(book, BookResult) and book.format == edition_type]
+    return ranked
+
+
+def _preview_books(ranked: list[BookResult | AudiobookResult]) -> list[BookResult | AudiobookResult]:
+    editions_per_work: dict[str, int] = {}
+    preview = []
+    for book in ranked:
+        key = work_key(book)
+        identity = key.rsplit("|", 1)[0]
+        if not identity or identity.endswith("|unknown") or identity.endswith("|"):
+            identity = f"{identity}|{book.source}:{book.id}"
+        if identity not in editions_per_work and len(editions_per_work) == 10:
+            continue
+        count = editions_per_work.get(identity, 0)
+        if count == 2:
+            continue
+        editions_per_work[identity] = count + 1
+        preview.append(book.model_copy(update={"work_key": key}))
+    return preview
+
+
+async def _search_catalog_events(
+    query: str, edition_type: str | None, *, preview: bool = True
+) -> AsyncGenerator[tuple[str, SearchResult]]:
     started = monotonic()
     providers: list[
         tuple[str, Callable[[str], Awaitable[list[BookResult] | list[AudiobookResult]]]]
@@ -157,55 +251,80 @@ async def _search_catalogs(query: str, edition_type: str | None = None) -> Searc
     if edition_type in (None, "audiobook"):
         providers.append(("audiosilo", search_audiosilo))
 
-
-    async def run[T](search: Callable[[str], Awaitable[T]], timeout: float) -> T:
-        async with asyncio.timeout(timeout):
+    async def run[T](search: Callable[[str], Awaitable[T]]) -> T:
+        async with asyncio.timeout(CATALOG_TIMEOUT_SECONDS):
             return await search(query)
 
-    book_results = await asyncio.gather(
-        *(run(search, CATALOG_TIMEOUT_SECONDS) for _, search in providers), return_exceptions=True
-    )
-    books: list[BookResult | AudiobookResult] = []
-    sources = []
-    errors = []
-    successes = 0
-    for (name, _), result in zip(providers, book_results, strict=True):
-        if isinstance(result, BaseException):
-            if not isinstance(result, (httpx.HTTPError, TimeoutError, SeriesProviderError)):
-                raise result
-            logger.warning("%s search unavailable (%s)", name, type(result).__name__)
-            errors.append(result)
-        else:
-            successes += 1
-            if result:
-                books.extend(result)
-                sources.append(name)
-    ranked: list[BookResult | AudiobookResult] = [
-        book for book in rank_books(query, books, limit=None)
-        if isinstance(book, AudiobookResult) or book.page_count is not None
-    ]
-    if edition_type == "audiobook":
-        ranked = [book for book in ranked if isinstance(book, AudiobookResult)]
-    elif edition_type is not None:
-        ranked = [book for book in ranked if isinstance(book, BookResult) and book.format == edition_type]
-    candidates = [
-        book for book in ranked
-        if isinstance(book, BookResult) and book.source != "hardcover" and not book.series
-    ][:12]
-    if candidates:
-        try:
-            remaining = max(0, SEARCH_DEADLINE_SECONDS - (monotonic() - started) - 0.5)
-            async with asyncio.timeout(min(ENRICHMENT_TIMEOUT_SECONDS, remaining)):
-                enriched = await enrich_catalog_books(query, candidates)
-            updates = {id(book): updated for book, updated in zip(candidates, enriched, strict=True)}
-            ranked = [updates.get(id(book), book) for book in ranked]
-        except (httpx.HTTPError, TimeoutError, SeriesProviderError) as exc:
-            logger.warning("Hardcover membership unavailable (%s)", type(exc).__name__)
-            errors.append(exc)
+    tasks = [asyncio.create_task(run(search)) for _, search in providers]
+    results: list[list[BookResult] | list[AudiobookResult] | None] = [None] * len(tasks)
+    errors: list[BaseException] = []
+    previous_preview: list[BookResult | AudiobookResult] = []
+    try:
+        async with asyncio.timeout(SEARCH_DEADLINE_SECONDS) as budget:
+            pending = set(tasks)
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for index, task in enumerate(tasks):
+                    if task not in done:
+                        continue
+                    name = providers[index][0]
+                    try:
+                        results[index] = task.result()
+                    except (httpx.HTTPError, TimeoutError, SeriesProviderError) as exc:
+                        logger.warning("%s search unavailable (%s)", name, type(exc).__name__)
+                        errors.append(exc)
+                if preview:
+                    available = [book for result in results if result for book in result]
+                    ranked = _ranked_catalog_books(query, available, edition_type)
+                    selected = _preview_books(ranked)
+                    if selected and selected != previous_preview:
+                        previous_preview = selected
+                        sources = [name for (name, _), result in zip(providers, results, strict=True) if result]
+                        source = sources[0] if len(sources) == 1 else "combined"
+                        deadline = budget.when()
+                        budget.reschedule(None)
+                        sending_started = monotonic()
+                        try:
+                            yield "snapshot", SearchResult(
+                                books=selected, series=[], source=source, partial=bool(errors)
+                            )
+                        finally:
+                            sending_elapsed = monotonic() - sending_started
+                            started += sending_elapsed
+                            if deadline is not None:
+                                budget.reschedule(deadline + sending_elapsed)
 
-    ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in ranked]
-    if not successes:
-        status = 504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors) else 502
-        raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")
-    source = sources[0] if len(sources) == 1 else "combined"
-    return SearchResult(books=ranked, series=[], source=source, partial=bool(errors))
+            if all(result is None for result in results):
+                status = (
+                    504 if any(isinstance(error, (httpx.TimeoutException, TimeoutError)) for error in errors)
+                    else 502
+                )
+                raise HTTPException(status_code=status, detail="Book search unavailable. Try again.")
+
+            books = [book for result in results if result for book in result]
+            ranked = _ranked_catalog_books(query, books, edition_type)
+            candidates = [
+                book for book in ranked
+                if isinstance(book, BookResult) and book.source != "hardcover" and not book.series
+            ][:12]
+            if candidates:
+                try:
+                    remaining = max(0, SEARCH_DEADLINE_SECONDS - (monotonic() - started) - 0.5)
+                    async with asyncio.timeout(min(ENRICHMENT_TIMEOUT_SECONDS, remaining)):
+                        enriched = await enrich_catalog_books(query, candidates)
+                    updates = {id(book): updated for book, updated in zip(candidates, enriched, strict=True)}
+                    ranked = [updates.get(id(book), book) for book in ranked]
+                except (httpx.HTTPError, TimeoutError, SeriesProviderError) as exc:
+                    logger.warning("Hardcover membership unavailable (%s)", type(exc).__name__)
+                    errors.append(exc)
+
+            ranked = [book.model_copy(update={"work_key": work_key(book)}) for book in ranked]
+            sources = [name for (name, _), result in zip(providers, results, strict=True) if result]
+            source = sources[0] if len(sources) == 1 else "combined"
+            final = SearchResult(books=ranked, series=[], source=source, partial=bool(errors))
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    yield "final", final

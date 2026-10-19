@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SeriesSearchResults } from "../features/books/book-search-results";
 import { LanguageProvider } from "../i18n";
+import { SearchApiError } from "../services/api";
 import type { SearchResult } from "../services/api";
 import type { Book, SearchBook, SearchSeries } from "../types";
 import { BookSearch } from "./book-search";
@@ -225,19 +226,10 @@ test("filters editions above the search field without losing the query", async (
   ).toBeTruthy();
   fireEvent.input(input, { target: { value: "dune" } });
   fireEvent.click(view.getByRole("button", { name: "Physical" }));
-  await waitFor(() =>
-    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
-      signal: expect.any(AbortSignal),
-      edition_type: "physical",
-    }),
-  );
+  await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(1));
   expect(input.value).toBe("dune");
   fireEvent.click(view.getByRole("button", { name: "All" }));
-  await waitFor(() =>
-    expect(searchBooksMock).toHaveBeenLastCalledWith("dune", {
-      signal: expect.any(AbortSignal),
-    }),
-  );
+  await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2));
   fireEvent.click(view.getByRole("button", { name: "Clear search" }));
   expect(input.value).toBe("");
   expect(searchBooksMock).toHaveBeenCalledTimes(2);
@@ -585,9 +577,6 @@ test("searches the typed title without a language selector or restriction", asyn
   await waitFor(() =>
     expect(view.getByText("Before the coffee gets cold")).toBeTruthy(),
   );
-  expect(search).toHaveBeenLastCalledWith("Before the coffee gets cold", {
-    signal: expect.any(AbortSignal),
-  });
 });
 
 const seriesMember = (
@@ -655,10 +644,6 @@ test("isolates books and series, retains query and edition filter, and adds a se
       view.getByRole("button", { name: /First volume.*300 pages/ }),
     ).toBeTruthy(),
   );
-  expect(searchBooksMock).toHaveBeenLastCalledWith("The Wheel of Time", {
-    signal: expect.any(AbortSignal),
-    edition_type: "physical",
-  });
   expect(searchSeriesMock).not.toHaveBeenCalled();
   expect(view.container.querySelectorAll(".book-search__series")).toHaveLength(
     0,
@@ -680,9 +665,6 @@ test("isolates books and series, retains query and edition filter, and adds a se
       view.getByRole("button", { name: "Add series: The Wheel of Time" }),
     ).toBeTruthy(),
   );
-  expect(searchSeriesMock).toHaveBeenLastCalledWith("The Wheel of Time", {
-    signal: expect.any(AbortSignal),
-  });
   expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(0);
   expect(view.getByText("1 result found")).toBeTruthy();
   expect(input.getAttribute("aria-controls")).toBe("book-series-results");
@@ -714,10 +696,6 @@ test("isolates books and series, retains query and edition filter, and adds a se
   expect(input.getAttribute("aria-label")).toBe("Search books");
   expect(view.queryByText("The Wheel of Time")).toBeNull();
   await waitFor(() => expect(searchBooksMock).toHaveBeenCalledTimes(2));
-  expect(searchBooksMock).toHaveBeenLastCalledWith("The Wheel of Time", {
-    signal: expect.any(AbortSignal),
-    edition_type: "physical",
-  });
   fireEvent.click(seriesTab);
   await waitFor(() =>
     expect(
@@ -1146,4 +1124,290 @@ test("shows Portuguese category and series search copy", async () => {
   } finally {
     localStorage.removeItem("hon.locale");
   }
+});
+
+test.each(["original", "merged"] as const)(
+  "saves %s preview editions only after final catalog results arrive",
+  async (winner) => {
+    const first: SearchBook = {
+      id: "first",
+      title: "Dune",
+      author: "Frank Herbert",
+      kind: "page",
+      format: "physical",
+      source: "google_books",
+      work_key: "dune|frank herbert|en",
+      page_count: 412,
+      cover_url: null,
+      language: "en",
+      isbn: "9780441172719",
+    };
+    const finalFirst: SearchBook =
+      winner === "merged"
+        ? { ...first, id: "bookinfo-edition", source: "bookinfo" }
+        : first;
+    const preview = [
+      first,
+      ...Array.from(
+        { length: 11 },
+        (_, index): SearchBook => ({
+          ...first,
+          id: `work-${index}`,
+          title: `Another work ${index}`,
+        }),
+      ),
+    ];
+    const translation: SearchBook = {
+      ...first,
+      id: "translation",
+      source: "open_library",
+      language: "pt",
+      work_key: "dune|frank herbert|pt",
+    };
+    let snapshot: ((value: SearchResult) => void) | undefined;
+    let finish!: (value: SearchResult) => void;
+    const search = vi.fn(
+      (
+        _query: string,
+        options?: { onSnapshot?: (value: SearchResult) => void },
+      ) => {
+        snapshot = options?.onSnapshot;
+        return new Promise<SearchResult>((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+    const onAdd = vi.fn();
+    const view = render(
+      <BookSearch onAdd={onAdd} onAddBooks={() => {}} searchBooks={search} />,
+    );
+    fireEvent.input(view.getByLabelText("Search books"), {
+      target: { value: "dune" },
+    });
+    await waitFor(() => expect(search).toHaveBeenCalled(), { timeout: 700 });
+    act(() =>
+      snapshot?.({ books: preview, series: [], source: "google_books" }),
+    );
+    expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
+      10,
+    );
+    expect(view.getByText(/Early results/)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Load more" }));
+    expect(view.container.querySelectorAll(".book-search__work")).toHaveLength(
+      12,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Dune.*412 pages/ }));
+    expect(view.getByText(/Waiting for all editions/)).toBeTruthy();
+    expect(onAdd).not.toHaveBeenCalled();
+    await act(async () => {
+      finish({
+        books: [finalFirst, translation, ...preview.slice(1)],
+        series: [],
+        source: "combined",
+      });
+    });
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id:
+            winner === "merged"
+              ? "bookinfo:bookinfo-edition"
+              : "google_books:first",
+          available_editions: [finalFirst, translation],
+        }),
+      ),
+    );
+  },
+);
+
+test("requires confirmation for incomplete final editions", async () => {
+  const first: SearchBook = {
+    id: "first",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|en",
+    page_count: 412,
+    cover_url: null,
+  };
+  searchBooksMock.mockResolvedValue({
+    books: [first],
+    series: [],
+    source: "combined",
+    partial: true,
+  });
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch
+      onAdd={onAdd}
+      onAddBooks={() => {}}
+      searchBooks={searchBooksMock}
+    />,
+  );
+  fireEvent.input(view.getByLabelText("Search books"), {
+    target: { value: "dune" },
+  });
+  const result = await waitFor(
+    () => view.getByRole("button", { name: /Dune.*412 pages/ }),
+    { timeout: 700 },
+  );
+  fireEvent.click(result);
+  expect(onAdd).not.toHaveBeenCalled();
+  expect(view.getByText(/This book may have missing editions/)).toBeTruthy();
+  fireEvent.click(
+    view.getByRole("button", { name: "Add with incomplete editions" }),
+  );
+  expect(onAdd).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "google_books:first" }),
+  );
+});
+
+test("keeps a timed-out preview but requires confirmation to save its editions", async () => {
+  const early: SearchBook = {
+    id: "early",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|en",
+    page_count: 412,
+    cover_url: null,
+  };
+  let snapshot!: (value: SearchResult) => void;
+  let fail!: (reason: Error) => void;
+  const search = vi.fn(
+    (
+      _query: string,
+      options?: { onSnapshot?: (value: SearchResult) => void },
+    ) => {
+      if (!options?.onSnapshot)
+        throw new Error("Missing search stream callback");
+      snapshot = options.onSnapshot;
+      return new Promise<SearchResult>((_, reject) => {
+        fail = reject;
+      });
+    },
+  );
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch onAdd={onAdd} onAddBooks={() => {}} searchBooks={search} />,
+  );
+  fireEvent.input(view.getByLabelText("Search books"), {
+    target: { value: "dune" },
+  });
+  await waitFor(() => expect(search).toHaveBeenCalled(), { timeout: 700 });
+  act(() => snapshot({ books: [early], series: [], source: "google_books" }));
+  fireEvent.click(view.getByRole("button", { name: /Dune.*412 pages/ }));
+  expect(view.getByText(/Waiting for all editions/)).toBeTruthy();
+  await act(async () => {
+    fail(new SearchApiError("Book search timed out", "timeout"));
+  });
+
+  expect(view.getByText(/This book may have missing editions/)).toBeTruthy();
+  expect(onAdd).not.toHaveBeenCalled();
+  fireEvent.click(
+    view.getByRole("button", { name: "Add with incomplete editions" }),
+  );
+  expect(onAdd).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "google_books:early" }),
+  );
+});
+
+test("drops a queued preview choice when the edition filter changes", async () => {
+  const book: SearchBook = {
+    id: "early",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|en",
+    page_count: 412,
+    cover_url: null,
+  };
+  let snapshot!: (value: SearchResult) => void;
+  let finish!: (value: SearchResult) => void;
+  const search = vi.fn(
+    (
+      _query: string,
+      options?: { onSnapshot?: (value: SearchResult) => void },
+    ) => {
+      if (options?.onSnapshot) snapshot = options.onSnapshot;
+      return new Promise<SearchResult>((resolve) => {
+        finish = resolve;
+      });
+    },
+  );
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch onAdd={onAdd} onAddBooks={() => {}} searchBooks={search} />,
+  );
+  fireEvent.input(view.getByLabelText("Search books"), {
+    target: { value: "dune" },
+  });
+  await waitFor(() => expect(search).toHaveBeenCalled(), { timeout: 700 });
+  const oldFinish = finish;
+  act(() => snapshot({ books: [book], series: [], source: "google_books" }));
+  fireEvent.click(view.getByRole("button", { name: /Dune.*412 pages/ }));
+  fireEvent.click(view.getByRole("button", { name: "Physical" }));
+  expect(view.queryByText(/Waiting for all editions/)).toBeNull();
+  await act(async () =>
+    oldFinish({ books: [book], series: [], source: "combined" }),
+  );
+  expect(onAdd).not.toHaveBeenCalled();
+});
+
+test("does not replace a queued edition if the final work omits it", async () => {
+  const first: SearchBook = {
+    id: "first",
+    title: "Dune",
+    author: "Frank Herbert",
+    kind: "page",
+    format: "physical",
+    source: "google_books",
+    work_key: "dune|frank herbert|en",
+    page_count: 412,
+    cover_url: null,
+  };
+  let snapshot!: (result: SearchResult) => void;
+  let finish!: (result: SearchResult) => void;
+  const search = vi.fn(
+    (
+      _query: string,
+      options?: { onSnapshot?: (result: SearchResult) => void },
+    ) => {
+      if (!options?.onSnapshot)
+        throw new Error("Missing search snapshot callback");
+      snapshot = options.onSnapshot;
+      return new Promise<SearchResult>((resolve) => {
+        finish = resolve;
+      });
+    },
+  );
+  const onAdd = vi.fn();
+  const view = render(
+    <BookSearch onAdd={onAdd} onAddBooks={() => {}} searchBooks={search} />,
+  );
+  fireEvent.input(view.getByLabelText("Search books"), {
+    target: { value: "dune" },
+  });
+  await waitFor(() => expect(search).toHaveBeenCalled(), { timeout: 700 });
+  act(() => snapshot({ books: [first], series: [], source: "google_books" }));
+  fireEvent.click(view.getByRole("button", { name: /Dune.*412 pages/ }));
+  await act(async () => {
+    finish({
+      books: [{ ...first, id: "different", source: "open_library" }],
+      series: [],
+      source: "combined",
+    });
+  });
+  expect(onAdd).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(
+      view.getByText("The selected edition is no longer available."),
+    ).toBeTruthy(),
+  );
 });

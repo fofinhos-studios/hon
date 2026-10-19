@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import {
   BookSearchResults,
   SeriesSearchResults,
   groupSearchResults,
+  workGroupKey,
 } from "../features/books/book-search-results";
 import { BookSearchStatus } from "../features/books/book-search-status";
 import { useBookSearch } from "../features/books/use-book-search";
@@ -21,6 +28,30 @@ interface Props {
   searchSeries?: typeof defaultSearchSeries;
 }
 
+function toSavedBook(book: SearchBook): Book | null {
+  const { source: _source, work_key: _workKey, ...edition } = book;
+  const id = edition.id.startsWith(`${book.source}:`)
+    ? edition.id
+    : `${book.source}:${edition.id}`;
+  if (edition.kind === "page") {
+    if (
+      !edition.page_count ||
+      !Number.isSafeInteger(edition.page_count) ||
+      edition.page_count < 1
+    )
+      return null;
+    return { ...edition, id, page_count: edition.page_count };
+  }
+  const durationMinutes = edition.duration_minutes;
+  if (
+    durationMinutes === null ||
+    !Number.isSafeInteger(durationMinutes) ||
+    durationMinutes < 1
+  )
+    return null;
+  return { ...edition, id, duration_minutes: durationMinutes };
+}
+
 export function BookSearch({
   onAdd,
   onAddBooks,
@@ -35,6 +66,8 @@ export function BookSearch({
   const [manualKind, setManualKind] = useState<"page" | "audiobook">("page");
   const [pendingBook, setPendingBook] = useState<SearchBook | null>(null);
   const [pendingEditions, setPendingEditions] = useState<SearchBook[]>([]);
+  const [pendingChoice, setPendingChoice] = useState<SearchBook | null>(null);
+  const [selectionError, setSelectionError] = useState("");
   const [editionPages, setEditionPages] = useState("");
   const editionInput = useRef<HTMLInputElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -51,59 +84,129 @@ export function BookSearch({
     Number.isSafeInteger(manualPageCount) &&
     manualPageCount > 0;
 
-  const toSavedBook = (book: SearchBook): Book | null => {
-    const { source: _source, work_key: _workKey, ...edition } = book;
-    const id = edition.id.startsWith(`${book.source}:`)
-      ? edition.id
-      : `${book.source}:${edition.id}`;
-    if (edition.kind === "page") {
-      if (
-        !edition.page_count ||
-        !Number.isSafeInteger(edition.page_count) ||
-        edition.page_count < 1
-      )
-        return null;
-      return { ...edition, id, page_count: edition.page_count };
-    }
-    const durationMinutes = edition.duration_minutes;
-    if (
-      durationMinutes === null ||
-      !Number.isSafeInteger(durationMinutes) ||
-      durationMinutes < 1
-    )
-      return null;
-    return { ...edition, id, duration_minutes: durationMinutes };
-  };
+  const handleAdd = useCallback(
+    (book: SearchBook, editions: SearchBook[]) => {
+      const quantity =
+        book.kind === "page" ? book.page_count : book.duration_minutes;
+      if (!quantity || !Number.isSafeInteger(quantity) || quantity < 1) {
+        setPendingBook(book);
+        setPendingEditions(editions);
+        setEditionPages("");
+        return;
+      }
+      const saved = toSavedBook(book);
+      if (saved) {
+        const validEditions = editions
+          .map((edition) =>
+            edition.source === book.source && edition.id === book.id
+              ? book
+              : edition,
+          )
+          .filter((edition) => toSavedBook(edition) !== null);
+        onAdd({
+          ...saved,
+          ...(validEditions.length > 1
+            ? { available_editions: validEditions }
+            : {}),
+        });
+      }
+      setPendingBook(null);
+      setPendingEditions([]);
+      setPendingChoice(null);
+      setSelectionError("");
+      search.reset();
+      searchInput.current?.focus();
+    },
+    [onAdd, search.reset],
+  );
 
-  const handleAdd = (book: SearchBook, editions: SearchBook[]) => {
-    const quantity =
-      book.kind === "page" ? book.page_count : book.duration_minutes;
-    if (!quantity || !Number.isSafeInteger(quantity) || quantity < 1) {
-      setPendingBook(book);
-      setPendingEditions(editions);
-      setEditionPages("");
+  const selectEdition = (book: SearchBook, editions: SearchBook[]) => {
+    setSelectionError("");
+    if (search.loading || search.partial) {
+      setPendingChoice(book);
       return;
     }
-    const saved = toSavedBook(book);
-    if (saved) {
-      const validEditions = editions
-        .map((edition) =>
-          edition.source === book.source && edition.id === book.id
-            ? book
-            : edition,
-        )
-        .filter((edition) => toSavedBook(edition) !== null);
-      onAdd({
-        ...saved,
-        ...(validEditions.length > 1
-          ? { available_editions: validEditions }
-          : {}),
-      });
+    handleAdd(book, editions);
+  };
+
+  const resolvedGroup = useMemo(
+    () =>
+      pendingChoice
+        ? groupSearchResults(search.results).find(
+            (group) => workGroupKey(group[0]) === workGroupKey(pendingChoice),
+          )
+        : undefined,
+    [pendingChoice, search.results],
+  );
+  const directChoice = pendingChoice
+    ? resolvedGroup?.find(
+        (book) =>
+          book.source === pendingChoice.source && book.id === pendingChoice.id,
+      )
+    : undefined;
+  const matchingIsbn =
+    pendingChoice?.isbn && !directChoice
+      ? resolvedGroup?.filter((book) => {
+          if (
+            book.kind !== pendingChoice.kind ||
+            book.isbn !== pendingChoice.isbn
+          )
+            return false;
+          if (
+            book.language &&
+            pendingChoice.language &&
+            book.language !== pendingChoice.language
+          )
+            return false;
+          if (book.kind === "page" && pendingChoice.kind === "page")
+            return (
+              (book.page_count === null ||
+                pendingChoice.page_count === null ||
+                book.page_count === pendingChoice.page_count) &&
+              (book.format === "unspecified" ||
+                pendingChoice.format === "unspecified" ||
+                book.format === pendingChoice.format)
+            );
+          return (
+            book.kind === "audiobook" &&
+            pendingChoice.kind === "audiobook" &&
+            (book.duration_minutes === null ||
+              pendingChoice.duration_minutes === null ||
+              book.duration_minutes === pendingChoice.duration_minutes)
+          );
+        })
+      : undefined;
+  const resolvedChoice =
+    directChoice ?? (matchingIsbn?.length === 1 ? matchingIsbn[0] : undefined);
+  useEffect(() => {
+    if (!pendingChoice || search.loading || !search.searched) return;
+    if (!resolvedGroup || !resolvedChoice) {
+      setPendingChoice(null);
+      setSelectionError(copy.search.editionMissing);
+    } else if (!search.partial) {
+      setPendingChoice(null);
+      handleAdd(resolvedChoice, resolvedGroup);
     }
+  }, [
+    pendingChoice,
+    search.loading,
+    search.searched,
+    resolvedGroup,
+    resolvedChoice,
+    search.partial,
+    copy.search.editionMissing,
+    handleAdd,
+  ]);
+  useEffect(() => {
+    if (search.error && search.results.length === 0) setPendingChoice(null);
+  }, [search.error, search.results.length]);
+
+  const clearSelection = () => {
+    setPendingChoice(null);
     setPendingBook(null);
     setPendingEditions([]);
-    search.reset();
-    searchInput.current?.focus();
+    setEditionPages("");
+    setSelectionError("");
   };
 
   const handleAddSeries = (books: Extract<SearchBook, { kind: "page" }>[]) => {
@@ -142,6 +245,7 @@ export function BookSearch({
     setManualTitle("");
     setManualPages("");
     setManualOpen(false);
+    clearSelection();
     search.reset();
     searchInput.current?.focus();
   };
@@ -172,9 +276,7 @@ export function BookSearch({
               onClick={() => {
                 if (search.mode === mode) return;
                 setManualOpen(false);
-                setPendingBook(null);
-                setPendingEditions([]);
-                setEditionPages("");
+                clearSelection();
                 search.setMode(mode);
               }}
             >
@@ -205,7 +307,11 @@ export function BookSearch({
                   type="button"
                   class="book-search__filter"
                   aria-pressed={search.editionType === value}
-                  onClick={() => search.setEditionType(value)}
+                  onClick={() => {
+                    if (search.editionType === value) return;
+                    clearSelection();
+                    search.setEditionType(value);
+                  }}
                 >
                   {label}
                 </button>
@@ -231,9 +337,10 @@ export function BookSearch({
                   : copy.search.seriesPlaceholder
               }
               value={search.query}
-              onInput={(e) =>
-                search.setQuery((e.target as HTMLInputElement).value)
-              }
+              onInput={(e) => {
+                clearSelection();
+                search.setQuery((e.target as HTMLInputElement).value);
+              }}
               aria-label={
                 search.mode === "books"
                   ? copy.search.label
@@ -261,6 +368,7 @@ export function BookSearch({
                 class="hon-icon-button book-search__input-action"
                 aria-label={copy.search.clear}
                 onClick={() => {
+                  clearSelection();
                   search.reset();
                   searchInput.current?.focus();
                 }}
@@ -373,6 +481,13 @@ export function BookSearch({
               : search.series.length
           }
         />
+        {search.mode === "books" &&
+          search.loading &&
+          search.results.length > 0 && (
+            <p class="book-search__status" aria-live="polite">
+              {copy.search.provisional}
+            </p>
+          )}
         {search.mode === "series" ? (
           <SeriesSearchResults
             series={search.series}
@@ -380,7 +495,48 @@ export function BookSearch({
             onAddSeries={handleAddSeries}
           />
         ) : (
-          <BookSearchResults results={search.results} onSelect={handleAdd} />
+          <BookSearchResults
+            key={`${search.query}:${search.editionType ?? "all"}`}
+            results={search.results}
+            onSelect={selectEdition}
+          />
+        )}
+        {search.mode === "books" && pendingChoice && search.loading && (
+          <p class="book-search__status" aria-live="polite">
+            {copy.search.waitingForEditions}
+          </p>
+        )}
+        {search.mode === "books" &&
+          pendingChoice &&
+          search.searched &&
+          search.partial &&
+          resolvedChoice && (
+            <div class="book-search__edition">
+              <p>{copy.search.incompleteEditions}</p>
+              <button
+                type="button"
+                class="hon-btn hon-btn--accent"
+                onClick={() => {
+                  if (!resolvedGroup || !resolvedChoice) return;
+                  setPendingChoice(null);
+                  handleAdd(resolvedChoice, resolvedGroup);
+                }}
+              >
+                {copy.search.confirmIncomplete}
+              </button>
+              <button
+                type="button"
+                class="hon-btn"
+                onClick={() => setPendingChoice(null)}
+              >
+                {copy.search.cancel}
+              </button>
+            </div>
+          )}
+        {selectionError && (
+          <p class="book-search__status" role="alert">
+            {selectionError}
+          </p>
         )}
         {search.partial && (
           <p class="book-search__status">{copy.search.partial}</p>

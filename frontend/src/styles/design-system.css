@@ -752,6 +752,10 @@ ul {
   border: var(--rule);
   margin-top: var(--space-3);
 }
+.book-search__load-more {
+  display: block;
+  margin: var(--space-3) auto 0;
+}
 .book-search__series + .book-search__series {
   border-top: var(--rule);
 }
