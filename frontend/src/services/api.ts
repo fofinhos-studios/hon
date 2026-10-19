@@ -5,16 +5,18 @@ const API_BASE = "/api";
 export class SearchApiError extends Error {
   readonly code: "invalid" | "timeout" | "unavailable" | "unknown";
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number | "timeout" | "unavailable") {
     super(message);
     this.code =
-      status === 422
-        ? "invalid"
-        : status === 504
-          ? "timeout"
-          : status === 502
-            ? "unavailable"
-            : "unknown";
+      status === "timeout" || status === "unavailable"
+        ? status
+        : status === 422
+          ? "invalid"
+          : status === 504
+            ? "timeout"
+            : status === 502
+              ? "unavailable"
+              : "unknown";
   }
 }
 
@@ -203,15 +205,94 @@ export type EditionType = "physical" | "digital" | "unspecified" | "audiobook";
 
 export async function searchBooks(
   query: string,
-  options: { signal?: AbortSignal; edition_type?: EditionType } = {},
+  options: {
+    signal?: AbortSignal;
+    edition_type?: EditionType;
+    onSnapshot?: (result: SearchResult) => void;
+  } = {},
 ): Promise<SearchResult> {
   const params = new URLSearchParams({ q: query });
   if (options.edition_type) params.set("edition_type", options.edition_type);
   const response = await fetch(`${API_BASE}/books/search?${params}`, {
     signal: options.signal,
+    headers: { Accept: "application/x-ndjson" },
   });
   if (!response.ok) throw await parseError(response, "Search failed");
-  return response.json() as Promise<SearchResult>;
+  if (!response.headers?.get("content-type")?.includes("application/x-ndjson"))
+    throw new SearchApiError("Search stream unavailable", "unavailable");
+  if (!response.body)
+    throw new SearchApiError("Search stream is empty", "unavailable");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let line = "";
+  let final: SearchResult | undefined;
+  let finished = false;
+  const consume = (text: string) => {
+    line += text;
+    let newline = line.indexOf("\n");
+    while (newline !== -1) {
+      options.signal?.throwIfAborted();
+      const eventLine = line.slice(0, newline).trim();
+      line = line.slice(newline + 1);
+      if (eventLine) {
+        if (final) throw new Error("Search stream continued after final");
+        const event: unknown = JSON.parse(eventLine);
+        if (!event || typeof event !== "object" || !("type" in event))
+          throw new Error("Invalid search stream event");
+        if (event.type === "error") {
+          if (
+            !("code" in event) ||
+            (event.code !== "timeout" && event.code !== "unavailable") ||
+            !("message" in event) ||
+            typeof event.message !== "string"
+          )
+            throw new Error("Invalid search stream error");
+          throw new SearchApiError(event.message, event.code);
+        }
+        if (
+          (event.type !== "snapshot" && event.type !== "final") ||
+          !("result" in event) ||
+          !event.result ||
+          typeof event.result !== "object" ||
+          !("books" in event.result) ||
+          !Array.isArray(event.result.books) ||
+          !("series" in event.result) ||
+          !Array.isArray(event.result.series) ||
+          !("source" in event.result) ||
+          typeof event.result.source !== "string"
+        )
+          throw new Error("Invalid search stream result");
+        if (event.type === "snapshot")
+          options.onSnapshot?.(event.result as SearchResult);
+        else final = event.result as SearchResult;
+      }
+      newline = line.indexOf("\n");
+    }
+  };
+  try {
+    while (true) {
+      options.signal?.throwIfAborted();
+      const chunk = await reader.read();
+      options.signal?.throwIfAborted();
+      if (chunk.done) {
+        finished = true;
+        break;
+      }
+      consume(decoder.decode(chunk.value, { stream: true }));
+      if (final) return final;
+    }
+    consume(`${decoder.decode()}\n`);
+    if (!final)
+      throw new SearchApiError(
+        "Search stream ended without final result",
+        "unavailable",
+      );
+    return final;
+  } finally {
+    if (!finished) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 export async function searchSeries(

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { SearchApiError, searchBooks, searchSeries } from "../../services/api";
-import type { EditionType } from "../../services/api";
+import type { EditionType, SearchResult } from "../../services/api";
 import type { SearchBook, SearchSeries } from "../../types";
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -80,6 +80,7 @@ export function useBookSearch(
         debounceRef.current = null;
         const controller = new AbortController();
         controllerRef.current = controller;
+        let latestSnapshot: SearchResult | undefined;
         try {
           const response =
             selectedMode === "books"
@@ -88,6 +89,11 @@ export function useBookSearch(
                   ...(selectedEditionType
                     ? { edition_type: selectedEditionType }
                     : {}),
+                  onSnapshot: (snapshot) => {
+                    if (requestId !== requestIdRef.current) return;
+                    latestSnapshot = snapshot;
+                    setResults(snapshot.books);
+                  },
                 })
               : await searchForSeries(trimmed, { signal: controller.signal });
           if (requestId !== requestIdRef.current) return;
@@ -114,7 +120,14 @@ export function useBookSearch(
               ? searchError.code
               : "unknown",
           );
-          setResults([]);
+          if (selectedMode === "books" && latestSnapshot?.books.length) {
+            setResults(latestSnapshot.books);
+            setPartial(true);
+            setSearched(true);
+            setUsingFallback(latestSnapshot.source === "open_library");
+          } else {
+            setResults([]);
+          }
           setSeries([]);
         } finally {
           if (controllerRef.current === controller)

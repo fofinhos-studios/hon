@@ -165,6 +165,33 @@ describe("BookSearchResults", () => {
     expect(view.queryByRole("dialog")).toBeNull();
   });
 
+  test("does not reopen an edition picker after provisional reranking removes its work", () => {
+    const alternate: SearchBook = {
+      ...book,
+      id: "other-edition",
+      language: "pt",
+      format: "physical",
+    };
+    const other: SearchBook = {
+      ...book,
+      id: "another-title",
+      title: "Another title",
+    };
+    const onSelect = vi.fn();
+    const view = render(
+      <BookSearchResults results={[book, alternate]} onSelect={onSelect} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Dune.*2 editions/ }));
+    expect(view.getByRole("dialog")).toBeTruthy();
+
+    view.rerender(<BookSearchResults results={[other]} onSelect={onSelect} />);
+    expect(view.queryByRole("dialog")).toBeNull();
+    view.rerender(
+      <BookSearchResults results={[book, alternate]} onSelect={onSelect} />,
+    );
+    expect(view.queryByRole("dialog")).toBeNull();
+  });
+
   test("shows language and publisher to distinguish editions", () => {
     const view = render(
       <BookSearchResults

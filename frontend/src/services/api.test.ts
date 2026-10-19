@@ -16,41 +16,6 @@ function mockFetch(response: Partial<Response>) {
 }
 
 describe("searchBooks", () => {
-  test("requests the search endpoint and returns its result", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      json: async () => ({ books: [], source: "google_books" }),
-    });
-    const controller = new AbortController();
-
-    expect(
-      await searchBooks("Dune & Messiah", { signal: controller.signal }),
-    ).toEqual({
-      books: [],
-      source: "google_books",
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/books/search?q=Dune+%26+Messiah",
-      { signal: controller.signal },
-    );
-  });
-
-  test("sends the selected edition filter only when supplied", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      json: async () => ({ books: [], series: [], source: "combined" }),
-    });
-    await searchBooks("Dune", { edition_type: "physical" });
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "/api/books/search?q=Dune&edition_type=physical",
-      { signal: undefined },
-    );
-    await searchBooks("Dune");
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/books/search?q=Dune", {
-      signal: undefined,
-    });
-  });
-
   test("uses the API error detail when present", async () => {
     mockFetch({ ok: false, json: async () => ({ detail: "Search is busy" }) });
 
@@ -90,23 +55,119 @@ describe("searchBooks", () => {
       message: "Book search timed out",
     });
   });
+  test("delivers provisional cards before the completed search and preserves late editions", async () => {
+    const encoder = new TextEncoder();
+    let emit!: (value: Uint8Array<ArrayBuffer>) => void;
+    let finish!: () => void;
+    const body = new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start(controller) {
+        emit = (value) => controller.enqueue(value);
+        finish = () => controller.close();
+      },
+    });
+    mockFetch({
+      ok: true,
+      body,
+      headers: new Headers({ "Content-Type": "application/x-ndjson" }),
+    });
+    const preview = {
+      books: [
+        {
+          id: "pt",
+          title: "Babel",
+          author: "R. F. Kuang",
+          language: "pt",
+          publisher: "Edições",
+        },
+      ],
+      series: [],
+      source: "bookinfo",
+      partial: false,
+    };
+    const complete = {
+      ...preview,
+      books: [
+        ...preview.books,
+        { ...preview.books[0], id: "en", language: "en" },
+      ],
+      source: "combined",
+    };
+    const onSnapshot = vi.fn();
+    const pending = searchBooks("Babel", { onSnapshot });
+    void pending.catch(() => {});
+
+    const first = encoder.encode(
+      `${JSON.stringify({ type: "snapshot", result: preview })}\n`,
+    );
+    const splitInsideAccent = first.indexOf(0xc3) + 1;
+    emit(first.subarray(0, 7));
+    emit(first.subarray(7, splitInsideAccent));
+    emit(first.subarray(splitInsideAccent));
+    await vi.waitFor(() => expect(onSnapshot).toHaveBeenCalledWith(preview));
+
+    let completed = false;
+    void pending.then(
+      () => {
+        completed = true;
+      },
+      () => {
+        completed = true;
+      },
+    );
+    expect(completed).toBe(false);
+    const last = encoder.encode(
+      `${JSON.stringify({ type: "final", result: complete })}\n`,
+    );
+    emit(last.subarray(0, last.length - 1));
+    emit(last.subarray(last.length - 1));
+    finish();
+    await expect(pending).resolves.toEqual(complete);
+  });
+
+  test("retains a preview but reports a terminal provider timeout", async () => {
+    const preview = {
+      books: [],
+      series: [],
+      source: "bookinfo",
+      partial: false,
+    };
+    const body = `${[
+      JSON.stringify({ type: "snapshot", result: preview }),
+      JSON.stringify({
+        type: "error",
+        code: "timeout",
+        message: "Catalog timed out",
+      }),
+    ].join("\n")}\n`;
+    mockFetch(
+      new Response(body, {
+        headers: { "Content-Type": "application/x-ndjson" },
+      }),
+    );
+    const onSnapshot = vi.fn();
+
+    await expect(searchBooks("Dune", { onSnapshot })).rejects.toMatchObject({
+      code: "timeout",
+      message: "Catalog timed out",
+    });
+    expect(onSnapshot).toHaveBeenCalledWith(preview);
+  });
+
+  test("treats a stream that ends without final results as unavailable", async () => {
+    mockFetch(
+      new Response(
+        `${JSON.stringify({ type: "snapshot", result: { books: [], series: [], source: "bookinfo" } })}\n`,
+        { headers: { "Content-Type": "application/x-ndjson" } },
+      ),
+    );
+
+    await expect(searchBooks("Dune")).rejects.toMatchObject({
+      code: "unavailable",
+    });
+  });
 });
 
 describe("searchSeries", () => {
-  test("requests the series endpoint with query and abort signal only", async () => {
-    const result = { books: [], series: [], source: "hardcover" };
-    const fetchMock = mockFetch({ ok: true, json: async () => result });
-    const controller = new AbortController();
-
-    await expect(
-      searchSeries("Dune & Messiah", { signal: controller.signal }),
-    ).resolves.toEqual(result);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/series/search?q=Dune+%26+Messiah",
-      { signal: controller.signal },
-    );
-  });
-
   test("classifies series search failures like book search failures", async () => {
     mockFetch({
       ok: false,

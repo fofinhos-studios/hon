@@ -1,4 +1,4 @@
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import { useLanguage } from "../../i18n";
 import type { SearchBook, SearchSeries } from "../../types";
 import { BookCover } from "./book-art";
@@ -20,7 +20,7 @@ function normalizedWorkPart(value: string): string {
   );
 }
 
-function workGroupKey(book: SearchBook): string {
+export function workGroupKey(book: SearchBook): string {
   const title = normalizedWorkPart(
     book.title.replace(/\s*\((?:unabridged|abridged|audiobook)\)\s*$/i, ""),
   );
@@ -45,15 +45,19 @@ export function groupSearchResults(results: SearchBook[]): SearchBook[][] {
 export function BookSearchResults({ results, onSelect }: Props) {
   const { copy, languageName, number } = useLanguage();
   const [selectedWork, setSelectedWork] = useState<string | null>(null);
-  if (results.length === 0) return null;
-  const groups = groupSearchResults(results);
+  const [visibleCount, setVisibleCount] = useState(10);
+  const groups = useMemo(() => groupSearchResults(results), [results]);
   const selectedEditions = groups.find(
     (editions) => workGroupKey(editions[0]) === selectedWork,
   );
+  useEffect(() => {
+    if (selectedWork && !selectedEditions) setSelectedWork(null);
+  }, [selectedWork, selectedEditions]);
+  if (results.length === 0) return null;
   return (
     <>
       <ul class="book-search__results" id="book-search-results">
-        {groups.map((editions, index) => {
+        {groups.slice(0, visibleCount).map((editions, index) => {
           const work =
             editions.find(
               (edition) => edition.language && edition.language !== "und",
@@ -133,6 +137,15 @@ export function BookSearchResults({ results, onSelect }: Props) {
           );
         })}
       </ul>
+      {groups.length > visibleCount && (
+        <button
+          type="button"
+          class="hon-btn book-search__load-more"
+          onClick={() => setVisibleCount((count) => count + 10)}
+        >
+          {copy.search.loadMore}
+        </button>
+      )}
       {selectedEditions && selectedEditions.length > 1 && (
         <EditionPicker
           title={selectedEditions[0].title}

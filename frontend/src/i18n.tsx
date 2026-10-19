@@ -35,6 +35,13 @@ const en = {
     editionCount: (count: number) =>
       `${count} edition${count === 1 ? "" : "s"}`,
     chooseEdition: "Choose edition",
+    loadMore: "Load more",
+    provisional: "Early results. Checking other catalogs for editions.",
+    waitingForEditions: "Waiting for all editions before adding this book.",
+    incompleteEditions:
+      "Some catalogs are unavailable. This book may have missing editions.",
+    confirmIncomplete: "Add with incomplete editions",
+    editionMissing: "The selected edition is no longer available.",
     clear: "Clear search",
     addManually: "Add manually",
     manualForm: "Add a book manually",
@@ -224,6 +231,14 @@ const pt: Copy = {
     editionCount: (count: number) =>
       `${count} ediç${count === 1 ? "ão" : "ões"}`,
     chooseEdition: "Escolha uma edição",
+    loadMore: "Carregar mais",
+    provisional: "Primeiros resultados. Buscando edições em outros catálogos.",
+    waitingForEditions:
+      "Aguardando todas as edições antes de adicionar o livro.",
+    incompleteEditions:
+      "Alguns catálogos estão indisponíveis. Este livro pode ter edições faltando.",
+    confirmIncomplete: "Adicionar com edições incompletas",
+    editionMissing: "A edição escolhida não está mais disponível.",
     clear: "Limpar busca",
     addManually: "Adicionar manualmente",
     manualForm: "Adicionar um livro manualmente",
